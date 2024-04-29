@@ -1,7 +1,7 @@
 # Structural_Optimization
-%%%%%%%%%%%%%% ASSIGNMENT %%%%%%%%%%%%%%%%%%%%%%%%\\
-Stress Constrained topology Optimization\\
+%%%%%%%%%%%%%% ASSIGNMENT %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n
+Stress Constrained topology Optimization\n
 
-top88 = original file\\
-cbeam = cantilever beam\\
-cl = l-shaped\\
+top88 = original file\n
+cbeam = cantilever beam\n
+cl = l-shaped\n

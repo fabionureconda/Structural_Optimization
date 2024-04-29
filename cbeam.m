@@ -16,7 +16,7 @@ edofMat = repmat(edofVec,1,8)+repmat([0 1 2*nely+[2 3 0 1] -2 -1],nelx*nely,1);
 iK = reshape(kron(edofMat,ones(8,1))',64*nelx*nely,1);
 jK = reshape(kron(edofMat,ones(1,8))',64*nelx*nely,1);
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-F = sparse(2*(nely+1)*(nelx+1)-2*(nely+1),1,-1,2*(nely+1)*(nelx+1),1);
+F = sparse(2*(nely+1)*(nelx)+2,1,-1,2*(nely+1)*(nelx+1),1);
 U = zeros(2*(nely+1)*(nelx+1),1);
 fixeddofs = [1:2*(nely+1)];
 alldofs = [1:2*(nely+1)*(nelx+1)];
