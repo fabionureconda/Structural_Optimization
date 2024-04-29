@@ -16,11 +16,20 @@ edofMat = repmat(edofVec,1,8)+repmat([0 1 2*nely+[2 3 0 1] -2 -1],nelx*nely,1);
 iK = reshape(kron(edofMat,ones(8,1))',64*nelx*nely,1);
 jK = reshape(kron(edofMat,ones(1,8))',64*nelx*nely,1);
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-F = sparse(2,1,-1,2*(nely+1)*(nelx+1),1);
+F = sparse(2*(nely+1)*(nelx+1)-2/3*(nely+1),1,-1,2*(nely+1)*(nelx+1),1);
 U = zeros(2*(nely+1)*(nelx+1),1);
-fixeddofs = union([1:2:2*(nely+1)],[2*(nelx+1)*(nely+1)]);
+fixeddofs = union([1:2*(nely+1):2*(nely+1)*(nelx+1)],[1:nely:2*(nely+1)*(nelx+1) +1]);
 alldofs = [1:2*(nely+1)*(nelx+1)];
 freedofs = setdiff(alldofs,fixeddofs);
+
+passive = zeros(nely, nelx);
+for i = 1:nelx
+    for j = 1:nely
+        if nelx > (4*nelx)+1 && nely < (6*nely)+1
+            passive(j,i) = 1;
+        end
+    end
+end
 %% PREPARE FILTER
 iH = ones(nelx*nely*(2*(ceil(rmin)-1)+1)^2,1);
 jH = ones(size(iH));
@@ -76,6 +85,7 @@ while change > 0.01
     elseif ft == 2
       xPhys(:) = (H*xnew(:))./Hs;
     end
+    xPhys(passive==1) = 0;
     if sum(xPhys(:)) > volfrac*nelx*nely, l1 = lmid; else l2 = lmid; end
   end
   change = max(abs(xnew(:)-x(:)));
