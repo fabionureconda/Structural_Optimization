@@ -1,5 +1,5 @@
 %%%% AN 88 LINE TOPOLOGY OPTIMIZATION CODE Nov, 2010 %%%%
-function top88(nelx,nely,volfrac,penal,rmin,ft)
+function cbeam(nelx,nely,volfrac,penal,rmin,ft)
 %% MATERIAL PROPERTIES
 E0 = 1;
 Emin = 1e-9;
