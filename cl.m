@@ -85,7 +85,7 @@ while change > 0.01
     elseif ft == 2
       xPhys(:) = (H*xnew(:))./Hs;
     end
-    xPhys(passive==1) = 0;
+    xPhys(passive==1) = 0;%%%%%%%%%%%%better in the design variable
     if sum(xPhys(:)) > volfrac*nelx*nely, l1 = lmid; else l2 = lmid; end
   end
   change = max(abs(xnew(:)-x(:)));
