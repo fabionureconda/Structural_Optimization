@@ -109,11 +109,24 @@ while change > tol
         end
         term11 = term11.^(1/r-1);
 
+        % Sum first LambdaK
+        term33 = 0;
+        for elx = 1:nelx
+            for ely = 1:nely
+        term3 = ((sig_vMe_vect(ely, elx) / ((xPhys(ely, elx)^(q-penal))* sig_max)))^(r-1);
+        term33 = term3+term33;
+            end
+        end
+       
+        % Term 4
+        a = 1/(2*sig_vMe_vect(ely, elx));
+        term4 = a*((2*sig_xxev(ely, elx)-sig_yyev(ely,elx))*D0(1,:)+(2*sig_xyev(ely, elx)-sig_xxev(ely,elx))*D0(2,:)+(6*sig_xyev(ely, elx)*D0(3,:)))*Be*(Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, alldofs););
+
         % Second term (missing the last)
         term2v = zeros(nely, nelx);
         for elx = 1:nelx
             for ely = 1:nely
-            term2 = ((sig_vMe_vect(ely, elx) / ((xPhys(ely, elx)^(q-penal))* sig_max))^(r-1)) * (penal - q) * (sig_vMe_vect(ely, elx) / (xPhys(ely, elx))^(q-penal+1) * sig_max);
+            term2 = ((sig_vMe_vect(ely, elx) / ((xPhys(ely, elx)^(q-penal))* sig_max))^(r-1)) * (penal - q) * (sig_vMe_vect(ely, elx) / (xPhys(ely, elx))^(q-penal+1) * sig_max) - term4*Uv(ely, elx);
             term2v(ely, elx) = term2;
             end
         end
