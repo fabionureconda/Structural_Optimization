@@ -4,6 +4,7 @@ function cbeam(nelx,nely,volfrac,penal,rmin,ft)
 E0 = 1;
 Emin = 1e-9;
 nu = 0.3;
+unitF = 10e3;
 %% PREPARE FINITE ELEMENT ANALYSIS
 A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
 A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
@@ -15,8 +16,14 @@ edofVec = reshape(2*nodenrs(1:end-1,1:end-1)+1,nelx*nely,1);
 edofMat = repmat(edofVec,1,8)+repmat([0 1 2*nely+[2 3 0 1] -2 -1],nelx*nely,1);
 iK = reshape(kron(edofMat,ones(8,1))',64*nelx*nely,1);
 jK = reshape(kron(edofMat,ones(1,8))',64*nelx*nely,1);
+
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-F = sparse(2*(nely+1)*(nelx)+2,1,-1,2*(nely+1)*(nelx+1),1);
+F1 = sparse(2*((nely+1)*(nelx)+1), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F2 = sparse(2*((nely+1)*(nelx)+2), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F3 = sparse(2*((nely+1)*(nelx)+3), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F4 = sparse(2*((nely+1)*(nelx)+4), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F5 = sparse(2*((nely+1)*(nelx)+5), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F = F1+F2+F3+F4+F5;
 U = zeros(2*(nely+1)*(nelx+1),1);
 fixeddofs = [1:2*(nely+1)];
 alldofs = [1:2*(nely+1)*(nelx+1)];
