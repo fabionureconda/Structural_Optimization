@@ -64,8 +64,8 @@ tol = 0.01;            % Convergence threshold
 mmaparams = [];        % Internal MMA parameters
 while change > tol
     % APPLY FILTER TO OBTAIN PHYSICAL DENSITIES
-        xPhys = conv2(x, h, 'same')./Hs;
-        xPhys = xPhys(:);
+    xPhys = conv2(x, h, 'same')./Hs;
+    xPhys = xPhys(:);
 
     % FINITE ELEMENT ANALYSIS
     sK = reshape(KE(:)*(Emin + xPhys(:)'.^penal * (E0 - Emin)), 64*nelx*nely, 1);
@@ -79,6 +79,9 @@ while change > tol
     % STRESS CALCULATION % no p
     term21v = zeros(1, nelx*nely);
     Uv = zeros(nelx * nely, 8);
+    term22v = zeros(nelx*nely, 8);
+    term11 = 0;
+    term22 = 0;
     for el = 1:nelx*nely
         Ue = U(edofMat(el, :));
         sig_xxe = D0(1 ,:) * Be * Ue;
@@ -89,8 +92,6 @@ while change > tol
 
     % SENSITIVITIES
         % Sums: First term 11, Second term 22
-            term11 = 0;
-            term22 = 0;
             for ell = 1:nelx*nely
                 Ue = U(edofMat(ell, :));
                 sig_xxel = D0(1 ,:) * Be * Ue;
@@ -101,33 +102,27 @@ while change > tol
                 term1 = ((sig_vMel / ((xPhys(ell)^(q-penal))* sig_max))^(r));
                 term11 = term1+term11;
                 
-                Ce = sparse(1:8, edofMat(ell, :), ones(1,8), 8, 8*nelx*nely);
-    
+                Ce = sparse(1:8, edofMat(ell, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
+
                 term2a = ((sig_vMel / ((xPhys(ell)^(q-penal))* sig_max)))^(r-1);
                 term2b = 1/(xPhys(ell)^(q-penal)*sig_max);
                 term2c = 1/(2*sig_vMel);
-                term2d = ((2*sig_xxel-sig_yyel)*D0(1,:)+(2*sig_xyel-sig_xxel)*D0(2,:)+(6*sig_xyel*D0(3,:)))*Be*Ce(:, ell);
+                term2d = (((2*sig_xxel-sig_yyel)*D0(1,:)+(2*sig_xyel-sig_xxel)*D0(2,:)+(6*sig_xyel*D0(3,:)))*Be*Ce(:, ell))';
                 term22 = term2a*term2b*term2c*term2d + term22;
             end
             term11 = term11.^(1/r-1);
-            term22;
+            term22v(el, : ) = term22;
 
     % Term 21
     term21 = ((sig_vMe / ((xPhys(el)^(q-penal))* sig_max))^(r-1)) * (penal - q) * (sig_vMe / (xPhys(el)^(q-penal+1) * sig_max));
     term21v(el) = term21;
     end
+    
+    dpdxPhys = term11 * (term21v - term22v*(Uv'));   % how to link the U of the 8 nodes of every elements with the elements.
 
-    dpdxPhys = term11 * (term21v - term22*Uv);   % how to link the U of the 8 nodes of every elements with the elements.
-    % Uv is stored as the displacement of every node in each element =
-    % 8*1440. (term22 is just a scalar (a sum))
-    % On the other side the term21 is runned for every element so it is a
-    % 1*1440 
-    % Something is missing from the last term term22 because the derivative
-    % or in some sense a term should be able to be a 8 dimensions not just
-    % a scalar
-
+    Hs_new = reshape(Hs, 1, 1440);
     dvdxPhys = repmat(1/nelx/nely, nely, nelx); % Sensitivity wrt physical densities
-    dpdx = conv2(dpdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
+    dpdx = conv2(dpdxPhys ./ Hs_new, h, 'same');    % Sensitivity wrt design variables
     dvdx = conv2(dvdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
     
     df0dx = dpdx(:)' / 100;
