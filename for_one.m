@@ -80,7 +80,7 @@ while change > tol
     f = v / volfrac - 1;
 
     % STRESS CALCULATION  % no p !!!!!!!!!!!!!!!!!!!!!
-    term21v = zeros(1, nelx*nely);
+    term21v = zeros(1, nelx*nely); 
     Uv = zeros(nelx * nely, 8);
     term11 = 0;
     term22v = zeros(nelx*nely, 8);
@@ -98,7 +98,7 @@ while change > tol
         % sum (here we assume that the term22 is just K*LAMDA*U)
                 
         term1 = ((sig_vMe / ((xPhys(el)^(q-penal))* sig_max))^(r));
-        term11 = term1+term11;
+        term11 = sum(term1);
         term11 = term11.^(1/r-1);
                 
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));            %Location Matrix
@@ -107,9 +107,9 @@ while change > tol
         term2b = 1/(xPhys(el)^(q-penal)*sig_max);
         term2c = 1/(2*sig_vMe);
         term2d = (((2*sig_xxe-sig_yye)*D0(1,:)+(2*sig_xye-sig_xxe)*D0(2,:)+(6*sig_xye*D0(3,:)))*Be*Ce(:, el))';
-        term22 = term2a*term2b*term2c*term2d + term22;
+        term22 = sum(term2a*term2b*term2c*term2d);
             
-        term22v(el, :) = term22;
+        %term22v(el, :) = term22;
 
         % Term 21 (not a sum)
         term21 = ((sig_vMe / ((xPhys(el)^(q-penal))* sig_max))^(r-1)) * (penal - q) * (sig_vMe / (xPhys(el)^(q-penal+1) * sig_max));
@@ -117,7 +117,7 @@ while change > tol
         
     end
     
-    dpdxPhys = term11 * (term21v - term22v*(Uv'));   % how to link the U of the 8 nodes of every elements with the elements.
+    dpdxPhys = term11 * (term21v - term22*(Uv));   % how to link the U of the 8 nodes of every elements with the elements.
     
     Hs_new = reshape(Hs, 1, 1440);
     dvdxPhys = repmat(1/nelx/nely, nely, nelx); % Sensitivity wrt physical densities
@@ -151,3 +151,33 @@ while change > tol
   end
 
 end
+
+
+
+% meanign of the sum, in the sense that how e is different from j in term
+% of pedices? 
+
+% how should we derive the term K*Lambda? what is the meaning of that term
+% in the sensitivities with respect to K*Lamda?
+
+% how are we able to put the constrain in the P value? do we need to create
+% a if loop in order to check if the P -1 < 0? Or for now we don't need
+% that term and it will only be use in the others points of the assignemnt?
+
+% why are we facing a problem in the dimensions of dfdx if they are
+% correct? why is matlab still exiting the error? there should be some
+% other problems to solve in order to arrive to the solution
+
+% we should increase the value of r at every iteration as said in the
+% paper, how can we do that? is it correct to have the implementation we
+% already create?
+
+% is correct to change the shape of Hs are reshape it in a vector of 1440
+% entries? or should we change the code in order to leave it like it was
+% original?
+
+% if we are dealing with all the nodes of the structure in the vector U
+% (since it is build with edofMat it has rows = el and for every rows it
+% has 8 entries of the nodes) and compare them to the elements? if we are
+% building the for loop in the elements we get a total of 1440 elements but
+% not 3550 values (ndof)
