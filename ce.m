@@ -30,6 +30,7 @@ edofMat = repmat(edofVec, 1, 8) + repmat([0 1 2*nely+[2 3 0 1] -2 -1], nelx*nely
 iK = reshape(kron(edofMat, ones(8,1))', 64*nelx*nely, 1);
 jK = reshape(kron(edofMat, ones(1,8))', 64*nelx*nely, 1);
 
+
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
 F1 = sparse(2*((nely+1)*(nelx)+1), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
 F2 = sparse(2*((nely+1)*(nelx)+2), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
@@ -42,6 +43,7 @@ fixeddofs = 1:2*(nely+1);
 alldofs = 1:2*(nely+1)*(nelx+1);
 freedofs = setdiff(alldofs, fixeddofs);
 
+
 % FORMULATION OF THE OPTIMIZATION PROBLEM
 sig_max = 235;      % Maximum allowable stress
 q = 2.5;            
@@ -50,10 +52,12 @@ delta_r = 0.1;
 Be = 1/(2*l)*[-1, 0, 1, 0, 1, 0, -1, 0; 0, -1, 0, -1, 0, 1, 0, 1; -1, -1, -1, 1, 1, 1, 1, -1];
 D0 = E0/(1-nu^2)*[1, nu, 0; nu, 1, 0; 0, 0, (1-nu)/2];
 
+
 % PREPARE FILTER
 [dy, dx] = meshgrid(-ceil(rmin)+1:ceil(rmin)-1, -ceil(rmin)+1:ceil(rmin)-1);
 h = max(0, rmin-sqrt(dx.^2 + dy.^2));
 Hs = conv2(ones(nely, nelx), h, 'same');
+
 
 % DESIGN VARIABLES
 x = ones(nely, nelx);  % Initialization of design variables
@@ -77,54 +81,51 @@ while change > tol
 
     % OBJECTIVE FUNCTION AND CONSTRAINT
     v = sum(xPhys(:)) / nelx / nely;
-    f = v / volfrac - 1;
+    f0 = v / volfrac - 1;
 
-    % STRESS CALCULATION  % no p !!!!!!!!!!!!!!!!!!!!!
-    term21v = zeros(1, nelx*nely); 
-    term11 = 0;
-    term22v = zeros(nelx*nely, 8);
-    term22 = 0;
+    % STRESS CALCULATION
+    sig_xxe = D0(1 ,:) * Be * U(edofMat(1:nelx*nely, :))';
+    sig_yye = D0(2, :) * Be * U(edofMat(1:nelx*nely, :))';
+    sig_xye = D0(3, :) * Be * U(edofMat(1:nelx*nely, :))';
+    sig_vMe = sqrt(sig_xxe.^2 + sig_yye.^2 - sig_xxe .* sig_yye + 3 .* sig_xye.^2);
+
+    pp = (sig_vMe' ./ ((xPhys.^(q-penal)).* sig_max));
+    ppp = pp.^(r);
+    P = (sum(ppp))^(1/r);
+    f = P-1;
+    term1 = P^(1/r -1);
+
+    % SENSITIVITIES
+    term21 = ((sig_vMe' ./ ((xPhys.^(q-penal)).* sig_max)).^(r-1)) .* (penal - q) .* (sig_vMe' ./ (xPhys.^(q-penal+1) .* sig_max));
+    
+    Lambda2v = zeros(nelx*nely, 1);
 
     for el = 1:nelx*nely
-        Ue = U(edofMat(el, :));
-        sig_xxe = D0(1 ,:) * Be * Ue;
-        sig_yye = D0(2, :) * Be * Ue;
-        sig_xye = D0(3, :) * Be * Ue;
-        sig_vMe = sqrt(sig_xxe^2 + sig_yye^2 - sig_xxe* sig_yye + 3 * sig_xye^2);
 
-        % SENSITIVITIES
-        % Sums: First term 11, Second term 22 and the term21 that is not a
-        % sum (here we assume that the term22 is just K*LAMDA*U)
+        Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
         
-        % first term of the eq 40
-        term1 = ((sig_vMe / ((xPhys(el)^(q-penal))* sig_max))^(r));
-        term11 = sum(term1);
-        term11 = term11.^(1/r-1);
+        Lambda1 = ((pp).^(r-1)) .* (1./(xPhys.^(q-penal).*sig_max)) .* (1./(2.*sig_vMe'));
         
-        % definition of the location matrix
-        Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));            %Location Matrix
+        Lambda2 = ((2*sig_xxe(:, el) - sig_yye(:, el)) * D0(1,:) + (2*sig_xye(:, el) - sig_xxe(:, el)) * D0(2,:) + 6*sig_xye(:, el) * D0(3,:));
         
-        % term in the second parenthesis in the eq 40 K*Lambda because we
-        % were not able to find an answer to the derivative wrt to rho
-        ce1 = reshape(sum((U(edofMat)*KE).*U(edofMat),2),nely,nelx);
-        c = -penal*(E0-Emin)*xPhys.^(penal-1).*ce1(:);
-        
-            
-        % term 21 (not a sum)
-        term21 = ((sig_vMe / ((xPhys(el)^(q-penal))* sig_max))^(r-1)) * (penal - q) * (sig_vMe / (xPhys(el)^(q-penal+1) * sig_max));
-        term21v(el) = term21;
-        
+        Lambda2v(el, :) = Lambda2;
+
     end
+
+    Lambda2v = (Lambda2v * Be * Ce)';
     
-    dpdxPhys = term11 * (term21v - c');   % how to link the U of the 8 nodes of every elements with the elements.
+    L = (sum(Lambda1' * Lambda2v)) \ K;
+    ce1 = reshape(sum((L .* KE) .* U(edofMat),2),nely,nelx);
+    term22 = -penal*(E0-Emin)*xPhys.^(penal-1).*ce1(:);
+          
+    dpdxPhys = term1 * (term21 - term22);
     
-    Hs_new = reshape(Hs, 1, 1440);
     dvdxPhys = repmat(1/nelx/nely, nely, nelx); % Sensitivity wrt physical densities
-    dpdx = conv2(dpdxPhys ./ Hs_new, h, 'same');    % Sensitivity wrt design variables
+    dpdx = conv2(dpdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
     dvdx = conv2(dvdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
     
-    df0dx = dpdx(:)' / 100;
-    dfdx = dvdx(:)' / volfrac;
+    df0dx = dvdx(:)' / volfrac;
+    dfdx = dpdx;
     
     % MMA UPDATE
     x = x(:)';
@@ -132,7 +133,7 @@ while change > tol
     fdim = size(f)
     dfdxdim = size(dfdx)
     df0dxdim = size(df0dx)
-    [xnew,~,~,~,mmaparams,~,change,history] = mma(x, xmin, xmax, f, df0dx, dfdx, mmaparams);
+    [xnew,~,~,~,mmaparams,~,change,history] = mma(x, xmin, xmax, f0, f, df0dx, dfdx, mmaparams);
 
   % PLOT CURRENT DESIGN
   colormap(gray);

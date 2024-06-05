@@ -125,8 +125,8 @@ while change > tol
     dpdx = conv2(dpdxPhys ./ Hs_new, h, 'same');    % Sensitivity wrt design variables
     dvdx = conv2(dvdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
     
-    df0dx = dpdx(:)' / 100;
-    dfdx = dvdx(:)' / volfrac;
+    df0dx = dpdx(:)';
+    dfdx =  p con dvdx(:)' / volfrac;
 
     % MMA UPDATE
     xdim = size(x)
