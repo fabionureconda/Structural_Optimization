@@ -81,43 +81,44 @@ while change > tol
 
     % STRESS CALCULATION  % no p !!!!!!!!!!!!!!!!!!!!!
     term21v = zeros(1, nelx*nely); 
-    Uv = zeros(nelx * nely, 8);
     term11 = 0;
     term22v = zeros(nelx*nely, 8);
     term22 = 0;
+
     for el = 1:nelx*nely
         Ue = U(edofMat(el, :));
         sig_xxe = D0(1 ,:) * Be * Ue;
         sig_yye = D0(2, :) * Be * Ue;
         sig_xye = D0(3, :) * Be * Ue;
         sig_vMe = sqrt(sig_xxe^2 + sig_yye^2 - sig_xxe* sig_yye + 3 * sig_xye^2);
-        Uv(el, :) = Ue';                                                               % Store displacement vector for element
 
         % SENSITIVITIES
         % Sums: First term 11, Second term 22 and the term21 that is not a
         % sum (here we assume that the term22 is just K*LAMDA*U)
-                
+        
+        % first term of the eq 40
         term1 = ((sig_vMe / ((xPhys(el)^(q-penal))* sig_max))^(r));
         term11 = sum(term1);
         term11 = term11.^(1/r-1);
-                
+        
+        % definition of the location matrix
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));            %Location Matrix
-
+        
+        % term in the second parenthesis in the eq 40 K*Lambda because we
+        % were not able to find an answer to the derivative wrt to rho
         term2a = ((sig_vMe / ((xPhys(el)^(q-penal))* sig_max)))^(r-1);
         term2b = 1/(xPhys(el)^(q-penal)*sig_max);
         term2c = 1/(2*sig_vMe);
         term2d = (((2*sig_xxe-sig_yye)*D0(1,:)+(2*sig_xye-sig_xxe)*D0(2,:)+(6*sig_xye*D0(3,:)))*Be*Ce(:, el))';
         term22 = sum(term2a*term2b*term2c*term2d);
             
-        %term22v(el, :) = term22;
-
-        % Term 21 (not a sum)
+        % term 21 (not a sum)
         term21 = ((sig_vMe / ((xPhys(el)^(q-penal))* sig_max))^(r-1)) * (penal - q) * (sig_vMe / (xPhys(el)^(q-penal+1) * sig_max));
         term21v(el) = term21;
         
     end
     
-    dpdxPhys = term11 * (term21v - term22*(Uv));   % how to link the U of the 8 nodes of every elements with the elements.
+    dpdxPhys = term11 * (term21v - term22*(U(edofMat)));   % how to link the U of the 8 nodes of every elements with the elements.
     
     Hs_new = reshape(Hs, 1, 1440);
     dvdxPhys = repmat(1/nelx/nely, nely, nelx); % Sensitivity wrt physical densities
@@ -148,6 +149,9 @@ while change > tol
     iter = iter+1;
     x(:) = xnew;
     r = r + delta_r;
+    if r>40
+        r = 40;
+    end 
   end
 
 end
