@@ -97,24 +97,27 @@ while change > tol
 
     % SENSITIVITIES
     term21 = ((sig_vMe' ./ ((xPhys.^(q-penal)).* sig_max)).^(r-1)) .* (penal - q) .* (sig_vMe' ./ (xPhys.^(q-penal+1) .* sig_max));
-    
-    Lambda2v = zeros(nelx*nely, 1);
 
+    Lambda1 = ((pp).^(r-1)) .* (1./(xPhys.^(q-penal).*sig_max)) .* (1./(2.*sig_vMe'));
+
+    el=1:1440;
+
+
+    
     for el = 1:nelx*nely
 
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
-        
-        Lambda1 = ((pp).^(r-1)) .* (1./(xPhys.^(q-penal).*sig_max)) .* (1./(2.*sig_vMe'));
-        
-        Lambda2 = ((2*sig_xxe(:, el) - sig_yye(:, el)) * D0(1,:) + (2*sig_xye(:, el) - sig_xxe(:, el)) * D0(2,:) + 6*sig_xye(:, el) * D0(3,:));
-        
-        Lambda2v(el, :) = Lambda2;
 
+        %Lambda2 = Lambda1 .* ((2*sig_xxe - sig_yye) * D0(1,:) + (2*sig_xye - sig_xxe) * D0(2,:) + 6*sig_xye * D0(3,:)) * Be * Ce;
+               
+        Lambda2 = Lambda1(el, :) .* ((2*sig_xxe(:, el) - sig_yye(:, el)) * D0(1,:) + (2*sig_xye(:, el) - sig_xxe(:, el)) * D0(2,:) + 6*sig_xye(:, el) * D0(3,:)) * Be * Ce;
+
+        vec = nonzeros(Lambda2);
+        
     end
 
-    Lambda2v = (Lambda2v * Be * Ce)';
-    
-    L = (sum(Lambda1' * Lambda2v)) \ K;
+    Lamnda = sum(c);
+    L = (L1s*L2s) \ K;
     ce1 = reshape(sum((L .* KE) .* U(edofMat),2),nely,nelx);
     term22 = -penal*(E0-Emin)*xPhys.^(penal-1).*ce1(:);
           
