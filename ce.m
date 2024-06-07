@@ -1,6 +1,6 @@
 % PROBLEM SETUP
-nelx = 24;          % Number of elements in x-direction
-nely = 60;          % Number of elements in y-direction
+nelx = 60;          % Number of elements in x-direction
+nely = 24;          % Number of elements in y-direction
 volfrac = 1;        % Maximum volume fraction
 penal = 3;          % Penalization power
 rmin = 2;           % Filter radius in terms of elements
@@ -12,7 +12,7 @@ E0 = 210e9;         % Young's modulus for the solid material
 Emin = 1e-9*E0;     % Young's modulus for the void material
 nu = 0.3;           % Poisson's ratio
 t = 0.01;           % Thickness
-l = 800/nely;       % Element length
+l = 0.01;           % Element length
 
 
 % PREPARE FINITE ELEMENT ANALYSIS
@@ -36,7 +36,8 @@ F2 = sparse(2*((nely+1)*(nelx)+2), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
 F3 = sparse(2*((nely+1)*(nelx)+3), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
 F4 = sparse(2*((nely+1)*(nelx)+4), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
 F5 = sparse(2*((nely+1)*(nelx)+5), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F = F1+F2+F3+F4+F5;                                                          % Load distribution
+F = F1+F2+F3+F4+F5;
+
 U = zeros(2*(nely+1)*(nelx+1), 1);
 fixeddofs = 1:2*(nely+1);
 alldofs = 1:2*(nely+1)*(nelx+1);
@@ -44,7 +45,7 @@ freedofs = setdiff(alldofs, fixeddofs);
 
 
 % FORMULATION OF THE OPTIMIZATION PROBLEM
-sig_max = 235;      % Maximum allowable stress
+sig_max = 235e6;      % Maximum allowable stress
 q = 2.5;            
 r = 2;
 delta_r = 0.1;
@@ -68,6 +69,7 @@ iter = 1;              % Iteration counter
 change = 1;            % (Fictitious) initial design change
 tol = 0.01;            % Convergence threshold
 mmaparams = [];        % Internal MMA parameters
+move = 0.05;
 while change > tol
     % APPLY FILTER TO OBTAIN PHYSICAL DENSITIES
     xPhys = conv2(x, h, 'same')./Hs;
@@ -81,7 +83,7 @@ while change > tol
 
     % OBJECTIVE FUNCTION AND CONSTRAINT
     v = sum(xPhys(:)) / nelx / nely;
-    f0 = v / volfrac - 1;
+    f0 = v;
 
     % STRESS CALCULATION
     sig_xxe = D0(1 ,:) * Be * U(edofMat(1:nelx*nely, :))';
@@ -93,6 +95,7 @@ while change > tol
     pp2 = pp.^(r);
     P = (sum(pp2))^(1/r);
     f = P-1;
+
     term1 = P^(1/r -1);
 
     % SENSITIVITIES
@@ -105,15 +108,9 @@ while change > tol
         Lambda1 = ((pp(el, :))^(r-1)) * (1/(xPhys(el, :)^(q-penal)*sig_max)) * (1/(2.*sig_vMe(:, el)));
         
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
-        Ceb = zeros(8, 2*(nely+1)*(nelx+1)) + Ce;
-        [~, J, ~] = find(Ceb);
-        Cet = Ceb(:, J);
-        
-        %Lambda2 = Lambda1 .* ((2*sig_xxe - sig_yye) * D0(1,:) + (2*sig_xye - sig_xxe) * D0(2,:) + 6*sig_xye * D0(3,:)) * Be * nonzeros(Ce);
-         
-        Lambda2 = Lambda1 .* ((2*sig_xxe(:, el) - sig_yye(:, el)) .* D0(1,:) + (2*sig_xye(:, el) - sig_xxe(:, el)) .* D0(2,:) + 6*sig_xye(:, el) .* D0(3,:)) * Be * Ceb;
-        
-        %LL = nonzeros(Lambda2);
+        Cef = full(Ce);
+
+        Lambda2 = Lambda1 .* ((2*sig_xxe(:, el) - sig_yye(:, el)) .* D0(1,:) + (2*sig_xye(:, el) - sig_xxe(:, el)) .* D0(2,:) + 6*sig_xye(:, el) .* D0(3,:)) * Be * Cef;
 
         LLv(el, :) = Lambda2;
         
@@ -138,15 +135,9 @@ while change > tol
     df0dx = dvdx(:)' / volfrac;
     dfdx = dpdx(:)';
     
-    % MMA UPDATE
-    x = x(:);
-    xdim = size(x)
-    fdim = size(f)
-    f0dim = size(f0)
-    dfdxdim = size(dfdx)
-    df0dxdim = size(df0dx)
-    [xnew,~,~,~,mmaparams,~,change,history] = mma(x, xmin, xmax, f0, f, df0dx, dfdx, mmaparams);
-
+  % MMA UPDATE
+  [xnew,~,~,~,mmaparams,~,change,history] = mma(x(:), xmin, xmax, f0, f, df0dx, dfdx, mmaparams, move);
+  
   % PLOT CURRENT DESIGN
   colormap(gray);
   imagesc(1-xPhys);
@@ -159,11 +150,11 @@ while change > tol
   if change>tol
     iter = iter+1;
     x(:) = xnew;
+    x = reshape(x, nely, nelx);
     r = r + delta_r;
     if r>40
         r = 40;
     end
-    x = reshape(x, nely, nelx);
-  end
+   end
 
 end
