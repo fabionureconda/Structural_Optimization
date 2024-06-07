@@ -12,9 +12,6 @@ E0 = 210e9;         % Young's modulus for the solid material
 Emin = 1e-9*E0;     % Young's modulus for the void material
 nu = 0.3;           % Poisson's ratio
 t = 0.01;           % Thickness
-
-
-% ELEMENT LENGTHS
 l = 800/nely;       % Element length
 
 
@@ -90,50 +87,54 @@ while change > tol
     sig_vMe = sqrt(sig_xxe.^2 + sig_yye.^2 - sig_xxe .* sig_yye + 3 .* sig_xye.^2);
 
     pp = (sig_vMe' ./ ((xPhys.^(q-penal)).* sig_max));
-    ppp = pp.^(r);
-    P = (sum(ppp))^(1/r);
+    pp2 = pp.^(r);
+    P = (sum(pp2))^(1/r);
     f = P-1;
     term1 = P^(1/r -1);
 
     % SENSITIVITIES
     term21 = ((sig_vMe' ./ ((xPhys.^(q-penal)).* sig_max)).^(r-1)) .* (penal - q) .* (sig_vMe' ./ (xPhys.^(q-penal+1) .* sig_max));
+     
+    LLv = [];
 
-    Lambda1 = ((pp).^(r-1)) .* (1./(xPhys.^(q-penal).*sig_max)) .* (1./(2.*sig_vMe'));
-
-    el=1:1440;
-
-
-    
     for el = 1:nelx*nely
 
+        Lambda1 = ((pp(el, :))^(r-1)) * (1/(xPhys(el, :)^(q-penal)*sig_max)) * (1/(2.*sig_vMe(:, el)));
+        
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
+        
+        %Lambda2 = Lambda1 .* ((2*sig_xxe - sig_yye) * D0(1,:) + (2*sig_xye - sig_xxe) * D0(2,:) + 6*sig_xye * D0(3,:)) * Be * nonzeros(Ce);
+         
+        Lambda2 = Lambda1 .* ((2*sig_xxe(:, el) - sig_yye(:, el)) * D0(1,:) + (2*sig_xye(:, el) - sig_xxe(:, el)) * D0(2,:) + 6*sig_xye(:, el) * D0(3,:)) * Be * Ce;
+        
+        LL = nonzeros(Lambda2);
 
-        %Lambda2 = Lambda1 .* ((2*sig_xxe - sig_yye) * D0(1,:) + (2*sig_xye - sig_xxe) * D0(2,:) + 6*sig_xye * D0(3,:)) * Be * Ce;
-               
-        Lambda2 = Lambda1(el, :) .* ((2*sig_xxe(:, el) - sig_yye(:, el)) * D0(1,:) + (2*sig_xye(:, el) - sig_xxe(:, el)) * D0(2,:) + 6*sig_xye(:, el) * D0(3,:)) * Be * Ce;
+        LLv = [LLv, LL];
 
-        vec = nonzeros(Lambda2);
+        %L2(el, :) = Lambda2;
         
     end
 
-    Lamnda = sum(c);
-    L = (L1s*L2s) \ K;
-    ce1 = reshape(sum((L .* KE) .* U(edofMat),2),nely,nelx);
+    Lam = sum(LLv');
+   
+    ce1 = reshape(sum((Lam* KE) .* U(edofMat),2),nely,nelx);
     term22 = -penal*(E0-Emin)*xPhys.^(penal-1).*ce1(:);
-          
+    
     dpdxPhys = term1 * (term21 - term22);
     
+    dpdxPhys = reshape(dpdxPhys, nely, nelx);
     dvdxPhys = repmat(1/nelx/nely, nely, nelx); % Sensitivity wrt physical densities
     dpdx = conv2(dpdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
     dvdx = conv2(dvdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
     
     df0dx = dvdx(:)' / volfrac;
-    dfdx = dpdx;
+    dfdx = dpdx(:)';
     
     % MMA UPDATE
-    x = x(:)';
+    x = x(:);
     xdim = size(x)
     fdim = size(f)
+    f0dim = size(f0)
     dfdxdim = size(dfdx)
     df0dxdim = size(df0dx)
     [xnew,~,~,~,mmaparams,~,change,history] = mma(x, xmin, xmax, f0, f, df0dx, dfdx, mmaparams);
