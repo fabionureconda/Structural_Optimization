@@ -74,7 +74,7 @@ while change > tol
 
     % OBJECTIVE FUNCTION AND CONSTRAINT
     v = sum(xPhys(:)) / nelx / nely;
-    f = v / volfrac - 1;
+    f0 = v / volfrac - 1;
 
     % STRESS CALCULATION % no p
     term21v = zeros(1, nelx*nely);
@@ -101,6 +101,7 @@ while change > tol
                 
                 term1 = ((sig_vMel / ((xPhys(ell)^(q-penal))* sig_max))^(r));
                 term11 = term1+term11;
+                f = term1;
                 
                 Ce = sparse(1:8, edofMat(ell, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
 
@@ -125,15 +126,15 @@ while change > tol
     dpdx = conv2(dpdxPhys ./ Hs_new, h, 'same');    % Sensitivity wrt design variables
     dvdx = conv2(dvdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
     
-    df0dx = dpdx(:)';
-    dfdx =  p con dvdx(:)' / volfrac;
+    df0dx = dvdx;
+    dfdx =  dpdx;
 
     % MMA UPDATE
     xdim = size(x)
     fdim = size(f)
     dfdxdim = size(dfdx)
     df0dxdim = size(df0dx)
-    [xnew,~,~,~,mmaparams,~,change,history] = mma(x(:), xmin, xmax, f, df0dx, dfdx, mmaparams);
+    [xnew,~,~,~,mmaparams,~,change,history] = mma(x(:), xmin, xmax, f0, f, df0dx, dfdx, mmaparams);
 
   % PLOT CURRENT DESIGN
   colormap(gray);
