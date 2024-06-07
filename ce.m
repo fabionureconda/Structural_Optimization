@@ -20,7 +20,9 @@ A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
 A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
 B11 = [-4  3 -2  9;  3 -4 -9  4; -2 -9 -4 -3;  9  4 -3 -4];
 B12 = [ 2 -3  4 -9; -3  2  9 -2;  4  9  2  3; -9 -2  3  2];
+
 KE = 1/(1-nu^2)/24*([A11 A12; A12' A11] + nu*[B11 B12; B12' B11]);
+
 nodenrs = reshape(1:(1+nelx)*(1+nely), 1+nely, 1+nelx);
 edofVec = reshape(2*nodenrs(1:end-1,1:end-1)+1, nelx*nely, 1);
 edofMat = repmat(edofVec, 1, 8) + repmat([0 1 2*nely+[2 3 0 1] -2 -1], nelx*nely, 1);
@@ -73,7 +75,8 @@ while change > tol
 
     % FINITE ELEMENT ANALYSIS
     sK = reshape(KE(:)*(Emin + xPhys(:)'.^penal * (E0 - Emin)), 64*nelx*nely, 1);
-    K = sparse(iK, jK, sK); K = (K + K') / 2;
+    K = sparse(iK, jK, sK); 
+    K = (K + K') / 2;
     U(freedofs) = K(freedofs, freedofs) \ F(freedofs);
 
     % OBJECTIVE FUNCTION AND CONSTRAINT
@@ -95,32 +98,37 @@ while change > tol
     % SENSITIVITIES
     term21 = ((sig_vMe' ./ ((xPhys.^(q-penal)).* sig_max)).^(r-1)) .* (penal - q) .* (sig_vMe' ./ (xPhys.^(q-penal+1) .* sig_max));
      
-    LLv = [];
+    LLv = zeros(nelx*nely, 2*(nely+1)*(nelx+1));
 
     for el = 1:nelx*nely
 
         Lambda1 = ((pp(el, :))^(r-1)) * (1/(xPhys(el, :)^(q-penal)*sig_max)) * (1/(2.*sig_vMe(:, el)));
         
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
+        Ceb = zeros(8, 2*(nely+1)*(nelx+1)) + Ce;
+        [~, J, ~] = find(Ceb);
+        Cet = Ceb(:, J);
         
         %Lambda2 = Lambda1 .* ((2*sig_xxe - sig_yye) * D0(1,:) + (2*sig_xye - sig_xxe) * D0(2,:) + 6*sig_xye * D0(3,:)) * Be * nonzeros(Ce);
          
-        Lambda2 = Lambda1 .* ((2*sig_xxe(:, el) - sig_yye(:, el)) * D0(1,:) + (2*sig_xye(:, el) - sig_xxe(:, el)) * D0(2,:) + 6*sig_xye(:, el) * D0(3,:)) * Be * Ce;
+        Lambda2 = Lambda1 .* ((2*sig_xxe(:, el) - sig_yye(:, el)) .* D0(1,:) + (2*sig_xye(:, el) - sig_xxe(:, el)) .* D0(2,:) + 6*sig_xye(:, el) .* D0(3,:)) * Be * Ceb;
         
-        LL = nonzeros(Lambda2);
+        %LL = nonzeros(Lambda2);
 
-        LLv = [LLv, LL];
-
-        %L2(el, :) = Lambda2;
+        LLv(el, :) = Lambda2;
         
     end
-
-    Lam = sum(LLv');
-   
-    ce1 = reshape(sum((Lam* KE) .* U(edofMat),2),nely,nelx);
-    term22 = -penal*(E0-Emin)*xPhys.^(penal-1).*ce1(:);
     
-    dpdxPhys = term1 * (term21 - term22);
+    Lam = sum(LLv, 1);
+
+    L = Lam / K;
+
+    term22w = L(edofMat) * KE * U(edofMat)';
+     
+    %ce1 = reshape(sum((L * (K/(E0-Emin)*xPhys.^(penal))) .* U(edofMat),2),nely,nelx);
+    term22 = (-penal*(E0-Emin)*xPhys'.^(penal-1))*term22w;
+    
+    dpdxPhys = term1 * (term21' - term22);
     
     dpdxPhys = reshape(dpdxPhys, nely, nelx);
     dvdxPhys = repmat(1/nelx/nely, nely, nelx); % Sensitivity wrt physical densities
@@ -154,8 +162,8 @@ while change > tol
     r = r + delta_r;
     if r>40
         r = 40;
-    end 
+    end
+    x = reshape(x, nely, nelx);
   end
 
 end
-
