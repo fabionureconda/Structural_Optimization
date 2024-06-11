@@ -134,16 +134,19 @@ while change > tol
         
     end
     
-    %Lam = sum(LLv, 2);
-    L = LLv' / K;
-
+    Lam = sum(LLv, 2);
+    L1 = Lam' /K;
+    %L = LLv' / K;
+%{
     sK2 = reshape(KE(:)*penal*(xPhys(:)'.^(penal-1) * (E0 - Emin)), 64*nelx*nely, 1);
     K2 = sparse(iK, jK, sK2);
     K2 = (K2 + K2') / 2;
-
-    term22 = L * K2 * U;
+%}
+    ce = L1(edofMat) * KE * U(edofMat)';
+    term222 = (penal*(xPhys(:)'.^(penal-1) * (E0 - Emin))).*ce(:);
+    %term22 = L1 * K22 * U;
     
-    dpdxPhys = term1 * (term21 - term22);
+    dpdxPhys = term1 * (term21 - term222);
     
     dpdxPhys = reshape(dpdxPhys, nely, nelx);   % Sensitivity wrt physical densities 
     dvdxPhys = repmat(1/nelx/nely, nely, nelx); % Sensitivity wrt physical densities 
