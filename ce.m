@@ -121,8 +121,8 @@ while change > tol
         
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
         Ce = full(Ce);
-        Ce_col = sum(Ce) ~= 0;
-        Cef = Ce(:, Ce_col);
+        %Ce_col = sum(Ce) ~= 0;
+        %Cef = Ce(:, Ce_col);
         %Cef = full(Ce);
         
         Lambda2 = Lambda11 * (((2*sig_xxe(:, el) - sig_yye(:, el)) * D0(1,:) + (2*sig_xye(:, el) - sig_xxe(:, el)) * D0(2,:) + 6*sig_xye(:, el) * D0(3,:)) * Be * Ce)';
@@ -131,9 +131,7 @@ while change > tol
         
     end
     
-    %Lam = sum(LLv, 2);
-
-    %L = Lam' / K;
+    %LLv = sum(LLv, 2);
 
     L = LLv' / K;
 
@@ -141,21 +139,16 @@ while change > tol
     K2 = sparse(iK, jK, sK2);
     K2 = (K2 + K2') / 2;
 
-    %dKdx = (penal*(Emin +(E0-Emin)*xPhys.^(penal-1))) .* KE(:);
-
     term22 = L * K2 * U;
-     
-    %ce1 = reshape(sum((L * (K/(E0-Emin)*xPhys.^(penal))) .* U(edofMat),2), nely, nelx);
-
     
     dpdxPhys = term1 * (term21 - term22);
     
-    dpdxPhys = reshape(dpdxPhys, nely, nelx);   % Sensitivity wrt physical densities 
-    dvdxPhys = repmat(1/nelx/nely, nely, nelx); % Sensitivity wrt physical densities 
-    dpdx = conv2(dpdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
-    dvdx = conv2(dvdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
+    dpdxPhys = reshape(dpdxPhys, nely, nelx);    % Sensitivity wrt physical densities 
+    dvdxPhys = repmat(1/nelx/nely, nely, nelx);  % Sensitivity wrt physical densities 
+    dpdx = conv2(dpdxPhys ./ Hs, h, 'same');     % Sensitivity wrt design variables
+    dvdx = conv2(dvdxPhys ./ Hs, h, 'same');     % Sensitivity wrt design variables
     
-    df0dx = dvdx(:)' / volfrac;
+    df0dx = dvdx(:)';
     dfdx = dpdx(:)';
     
   % MMA UPDATE
