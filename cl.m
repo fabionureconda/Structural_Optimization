@@ -68,6 +68,7 @@ while change > 0.01
   c = sum(sum((Emin+xPhys.^penal*(E0-Emin)).*ce));
   dc = -penal*(E0-Emin)*xPhys.^(penal-1).*ce;
   dv = ones(nely,nelx);
+  x(passive == 1) = 0;
   %% FILTERING/MODIFICATION OF SENSITIVITIES
   if ft == 1
     dc(:) = H*(x(:).*dc(:))./Hs./max(1e-3,x(:));
@@ -85,7 +86,6 @@ while change > 0.01
     elseif ft == 2
       xPhys(:) = (H*xnew(:))./Hs;
     end
-    xPhys(passive==1) = 0;%%%%%%%%%%%%better in the design variable
     if sum(xPhys(:)) > volfrac*nelx*nely, l1 = lmid; else l2 = lmid; end
   end
   change = max(abs(xnew(:)-x(:)));
