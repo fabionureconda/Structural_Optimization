@@ -5,7 +5,6 @@ volfrac = 0.12;       % Maximum volume fraction
 penal = 3;            % Penalization power
 rmin = 3;             % Filter radius in terms of elements
 ft = 2;
-
 %% MATERIAL PROPERTIES
 E0 = 210e9;
 Emin = 1e-9*E0;
@@ -40,6 +39,10 @@ freedofs = setdiff(alldofs,fixeddofs);
 % STRESS INITIALIZATION
 Be = 1/(2*l)*[-1, 0, 1, 0, 1, 0, -1, 0; 0, -1, 0, -1, 0, 1, 0, 1; -1, -1, -1, 1, 1, 1, 1, -1];
 D0 = E0/(1-nu^2)*[1, nu, 0; nu, 1, 0; 0, 0, (1-nu)/2];
+sig_xxe = zeros(nelx*nely, 1);
+sig_yye = zeros(nelx*nely, 1);
+sig_xye = zeros(nelx*nely, 1);
+
 
 %% PREPARE FILTER
 iH = ones(nelx*nely*(2*(ceil(rmin)-1)+1)^2,1);
@@ -81,10 +84,6 @@ while change > 0.01
   dv = ones(nely,nelx);
 
   %% STRESS CALCULATION
-  sig_xxe = zeros(nelx*nely, 1);
-  sig_yye = zeros(nelx*nely, 1);
-  sig_xye = zeros(nelx*nely, 1);
-
   for el = 1:nelx*nely
         Ue = U(edofMat(el, :));
         sig_xxe(el) = D0(1, :) * Be * Ue;
@@ -122,7 +121,6 @@ while change > 0.01
   colormap(gray); imagesc(1-xPhys); caxis([0 1]); axis equal; axis off; drawnow;
   %% PLOT STRESSES
   sig_vMe = reshape(sig_vMe, nely, nelx);
-  
   figure(2)
   imagesc(sig_vMe);
   axis('equal');
