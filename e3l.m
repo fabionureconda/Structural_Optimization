@@ -26,11 +26,11 @@ iK = reshape(kron(edofMat,ones(8,1))',64*nelx*nely,1);
 jK = reshape(kron(edofMat,ones(1,8))',64*nelx*nely,1);
 
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-F1 = sparse(2*((nely+1)*(nelx+1)+1)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F2 = sparse(2*((nely+1)*(nelx+1)+2)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F3 = sparse(2*((nely+1)*(nelx+1)+3)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F4 = sparse(2*((nely+1)*(nelx+1)+4)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F5 = sparse(2*((nely+1)*(nelx+1)+5)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
+F1 = sparse(2*((nely+1)*(nelx+1)+0)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
+F2 = sparse(2*((nely+1)*(nelx+1)+1)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
+F3 = sparse(2*((nely+1)*(nelx+1)+2)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
+F4 = sparse(2*((nely+1)*(nelx+1)+3)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
+F5 = sparse(2*((nely+1)*(nelx+1)+4)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
 F = F1 + F2 + F3 + F4 + F5;
 U = zeros(2*(nely+1)*(nelx+1),1);
 fixeddofs = union([1:2*(nely+1):2*(nely+1)*(nelx+1)],[2:2*(nely+1):2*(nely+1)*(nelx+1)]);

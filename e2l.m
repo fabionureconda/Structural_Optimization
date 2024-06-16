@@ -1,6 +1,6 @@
 % PROBLEM SETUP
-nelx = 30;          % Number of elements in x-direction
-nely = 30;          % Number of elements in y-direction
+nelx = 60;          % Number of elements in x-direction
+nely = 60;          % Number of elements in y-direction
 volfrac = 1;        % Maximum volume fraction
 penal = 3;          % Penalization power
 rmin = 4.5;           % Filter radius in terms of elements
