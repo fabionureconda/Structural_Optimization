@@ -37,6 +37,7 @@ F = F1+F2+F3+F4+F5;
 
 U = zeros(2*(nely+1)*(nelx+1), 1);
 U3 = zeros(2*(nely+1)*(nelx+1), 1);
+
 fixeddofs = 1:2*(nely+1);
 alldofs = 1:2*(nely+1)*(nelx+1);
 freedofs = setdiff(alldofs, fixeddofs);
@@ -67,11 +68,10 @@ mmaparams = [];        % Internal MMA parameters
 move = 0.05;           % Move parameter for MMA
 
 % FINITE DIFFERENCE
-h3 = 1e-5;
-nStep = length(h);
+h3 = 1e-7;
 df3dx = zeros(nelx*nely, 1);
 
-while (change > tol) %&& (r < 40)
+while (change > tol) && (r < 40)
 
     % APPLY FILTER TO OBTAIN PHYSICAL DENSITIES
     xPhys = conv2(x, h, 'same')./Hs;
@@ -82,78 +82,90 @@ while (change > tol) %&& (r < 40)
     K = sparse(iK, jK, sK);
     K = (K + K') / 2;
     U(freedofs) = K(freedofs, freedofs) \ F(freedofs);
+    U(fixeddofs) = 0;
     
     % OBJECTIVE FUNCTION
     v = sum(xPhys(:)) / nelx / nely;
-    f0 = v;
+    f0 = v - 1;
 
-    % STRESS CALCULATION - CONSTRAIN
-    sig_xxe = D0(1 ,:) * Be * U(edofMat(1:nelx*nely, :))';
-    sig_yye = D0(2, :) * Be * U(edofMat(1:nelx*nely, :))';
-    sig_xye = D0(3, :) * Be * U(edofMat(1:nelx*nely, :))';
+    % STRESS CALCULATION - CONSTRAINT
+    sig_xxe = zeros(nelx*nely, 1);
+    sig_yye = zeros(nelx*nely, 1);
+    sig_xye = zeros(nelx*nely, 1);
+
+    for el = 1:nelx*nely
+        Ue = U(edofMat(el, :));
+        sig_xxe(el) = D0(1, :) * Be * Ue;
+        sig_yye(el) = D0(2, :) * Be * Ue;
+        sig_xye(el) = D0(3, :) * Be * Ue;
+    end
+    
     sig_vMe = sqrt(sig_xxe.^2 + sig_yye.^2 - sig_xxe .* sig_yye + 3 .* sig_xye.^2);
-    sig_vMe = sig_vMe(:);
     
     f = sum((sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)).^r)^(1/r) - 1;
 
     cs = max(sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)) / sum((sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)).^r)^(1/r);
 
     % SENSITIVITIES
-    term1 = sum((sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)).^r)^((1/r) -1);
-    term21 = ((sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)).^(r-1)) .* (penal - q) .* (sig_vMe ./ (xPhys.^(q-penal+1) .* sig_max));
-
-    q1v = zeros(nelx*nely, 1); 
-    for el = 1:nelx*nely
-        q1 = ((sig_vMe(el, :) / ((xPhys(el, :)^(q-penal))* sig_max))^(r-1)) * (1/(xPhys(el, :)^(q-penal)*sig_max)) * (1/(2*sig_vMe(el,:)));
-        q1v(el, :) = q1;
-    end
-    q1s = sum(q1v);
-
-    qv = zeros(2*(nely+1)*(nelx+1), nelx*nely);
+    qv = zeros(2*(nely+1)*(nelx+1), nelx*nely); 
     for el = 1:nelx*nely
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
         Ce = full(Ce);
-        qe = q1s * (((2*sig_xxe(:, el) - sig_yye(:, el)) * D0(1,:) + (2*sig_xye(:, el) - sig_xxe(:, el)) * D0(2,:) + 6*sig_xye(:, el) * D0(3,:)) * Be * Ce)';
+        q1 = ((sig_vMe(el) / ((xPhys(el)^(q-penal))* sig_max))^(r-1)) * (1/(xPhys(el)^(q-penal)*sig_max)) * (1/(2*sig_vMe(el)));
+        qe = q1 * (((2*sig_xxe(el) - sig_yye(el)) * D0(1,:) + (2*sig_xye(el) - sig_xxe(el)) * D0(2,:) + 6*sig_xye(el) * D0(3,:)) * Be * Ce)';
         qv(:, el) = qe;
     end
     qs = sum(qv, 2);
-    Lambda = K \ qs;
+    Lambda = K \ qs;    
 %{
     sK2 = reshape(KE(:)*penal*(xPhys(:)'.^(penal-1) * (E0 - Emin)), 64*nelx*nely, 1);
     K2 = sparse(iK, jK, sK2);
     K2 = (K2 + K2') / 2;
-
+    
     ce = L1 * KE;
     term222 = (penal*(xPhys(:)'.^(penal-1) * (E0 - Emin))).*ce(:);
     %term22 = L1 * K22 * U;
-%}
+%}  
     term22 = reshape(sum((Lambda(edofMat)*KE).*U(edofMat),2),nely,nelx);
     term22 = (penal*(xPhys(:).^(penal-1) * (E0 - Emin))).*term22(:);
+    
+    term1 = sum((sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)).^r)^((1/r) -1);
+    term21 = ((sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)).^(r-1)) .* (penal - q) .* (sig_vMe ./ (xPhys.^(q-penal+1) .* sig_max));
+    
     dpdxPhys = term1 * cs * (term21 - term22);
     
-    dpdxPhys = reshape(dpdxPhys, nely, nelx);   % Sensitivity wrt physical densities 
-    dvdxPhys = repmat(1/nelx/nely, nely, nelx); % Sensitivity wrt physical densities 
-    dpdx = conv2(dpdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
-    dvdx = conv2(dvdxPhys ./ Hs, h, 'same');    % Sensitivity wrt design variables
+    dpdxPhys = reshape(dpdxPhys, nely, nelx);    % Sensitivity wrt physical densities 
+    dvdxPhys = repmat(1/nelx/nely, nely, nelx);  % Sensitivity wrt physical densities 
+    dpdx = conv2(dpdxPhys ./ Hs, h, 'same');     % Sensitivity wrt design variables
+    dvdx = conv2(dvdxPhys ./ Hs, h, 'same');     % Sensitivity wrt design variables
     
-    df0dx = dvdx(:)';
-    dfdx = dpdx(:)';
-
+    df0dx = dvdx(:);
+    dfdx = dpdx(:);
+    
     % FINITE DIFFERENCE CHECK
     x3 = x + h3;
     xPhys3 = conv2(x3, h, 'same')./Hs;
     xPhys3 = xPhys3(:);
-
+    
     sK3 = reshape(KE(:)*(Emin + xPhys3(:)'.^penal * (E0 - Emin)), 64*nelx*nely, 1);
     K3 = sparse(iK, jK, sK3);
     K3 = (K3 + K3') / 2;
     U3(freedofs) = K3(freedofs, freedofs) \ F(freedofs);
-
-    sig_xxe3 = D0(1 ,:) * Be * U3(edofMat(1:nelx*nely, :))';
-    sig_yye3 = D0(2, :) * Be * U3(edofMat(1:nelx*nely, :))';
-    sig_xye3 = D0(3, :) * Be * U3(edofMat(1:nelx*nely, :))';
+    U3(fixeddofs) = 0;
+    
+    % STRESS CALCULATION - CONSTRAINT
+    sig_xxe3 = zeros(nelx*nely, 1);
+    sig_yye3 = zeros(nelx*nely, 1);
+    sig_xye3 = zeros(nelx*nely, 1);
+    
+    for el3 = 1:nelx*nely
+        Ue3 = U3(edofMat(el3, :));
+        sig_xxe3(el3) = D0(1, :) * Be * Ue3;
+        sig_yye3(el3) = D0(2, :) * Be * Ue3;
+        sig_xye3(el3) = D0(3, :) * Be * Ue3;
+    end
+    
     sig_vMe3 = sqrt(sig_xxe3.^2 + sig_yye3.^2 - sig_xxe3 .* sig_yye3 + 3 .* sig_xye3.^2);
-    sig_vMe3 = sig_vMe3(:);
 
     for el = 1:nelx*nely
         p13 = (sig_vMe3(el) / ((xPhys3(el)^(q-penal))* sig_max));
@@ -189,14 +201,15 @@ while (change > tol) %&& (r < 40)
   axis('off');
   colormap('turbo');
   colorbar;
-  sig_vMe = sig_vMe(:);
 
+  sig_vMe = sig_vMe(:);
+  %{
   figure(3)
   plot(dfdx', 'r')
   hold on
   plot(df3dx, 'b')
   hold off
-
+  %}
   % CHECK CONVERGENCE CRITERIA AND MOVE ON TO NEXT ITERATION
   if change>tol
     iter = iter+1;
@@ -206,7 +219,6 @@ while (change > tol) %&& (r < 40)
    end
 
 end
-
 
 % PLOT CONVERGENCE HISTORY
 figure;
