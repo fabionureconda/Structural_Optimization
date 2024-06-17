@@ -1,15 +1,15 @@
 % PROBLEM SETUP
 nelx = 100;           % Number of elements in x-direction
 nely = 40;            % Number of elements in y-direction
-volfrac = 0.12;       % Maximum volume fraction
+volfrac = 0.19;       % Maximum volume fraction
 penal = 3;            % Penalization power
-rmin = 3;             % Filter radius in terms of elements
+rmin = 1.8;             % Filter radius in terms of elements
 ft = 2;
 %% MATERIAL PROPERTIES
 E0 = 210e9;
 Emin = 1e-9*E0;
 nu = 0.3;
-unitF = 10000;
+unitF = 10e3;
 l = 0.01;
 t = 0.01;
 %% PREPARE FINITE ELEMENT ANALYSIS
@@ -25,11 +25,11 @@ iK = reshape(kron(edofMat,ones(8,1))',64*nelx*nely,1);
 jK = reshape(kron(edofMat,ones(1,8))',64*nelx*nely,1);
 
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-F1 = sparse(2*((nely+1)*(nelx)+0), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F2 = sparse(2*((nely+1)*(nelx)+1), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F3 = sparse(2*((nely+1)*(nelx)+2), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F4 = sparse(2*((nely+1)*(nelx)+3), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F5 = sparse(2*((nely+1)*(nelx)+4), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F1 = sparse(2*((nely+1)*(nelx)+1), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F2 = sparse(2*((nely+1)*(nelx)+2), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F3 = sparse(2*((nely+1)*(nelx)+3), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F4 = sparse(2*((nely+1)*(nelx)+4), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F5 = sparse(2*((nely+1)*(nelx)+5), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
 F = F1+F2+F3+F4+F5;
 U = zeros(2*(nely+1)*(nelx+1),1);
 fixeddofs = [1:2*(nely+1)];
@@ -82,7 +82,7 @@ while change > 0.01
   c = sum(sum((Emin+xPhys.^penal*(E0-Emin)).*ce));
   dc = -penal*(E0-Emin)*xPhys.^(penal-1).*ce;
   dv = ones(nely,nelx);
-
+  f0(loop) = c;
   %% STRESS CALCULATION
   for el = 1:nelx*nely
         Ue = U(edofMat(el, :));
@@ -128,3 +128,8 @@ while change > 0.01
   colormap('turbo');
   colorbar;
 end
+% PLOT CONVERGENCE HISTORY
+figure;
+plot(1:loop, f0);
+xlabel('Function evaluations');
+ylabel('Objective function');

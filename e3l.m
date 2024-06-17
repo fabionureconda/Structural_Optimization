@@ -3,7 +3,7 @@ nelx = 100;           % Number of elements in x-direction
 nely = 100;            % Number of elements in y-direction
 volfrac = 0.15;       % Maximum volume fraction
 penal = 3;            % Penalization power
-rmin = 3;             % Filter radius in terms of elements
+rmin = 2.5;             % Filter radius in terms of elements
 ft = 2;
 
 %% MATERIAL PROPERTIES
@@ -89,7 +89,7 @@ while change > 0.01
   c = sum(sum((Emin+xPhys.^penal*(E0-Emin)).*ce));
   dc = -penal*(E0-Emin)*xPhys.^(penal-1).*ce;
   dv = ones(nely,nelx);
-
+  f0(loop) = c;
   %% STRESS CALCULATION
   sig_xxe = zeros(nelx*nely, 1);
   sig_yye = zeros(nelx*nely, 1);
@@ -143,3 +143,8 @@ while change > 0.01
   colormap('turbo');
   colorbar;
 end
+% PLOT CONVERGENCE HISTORY
+figure;
+plot(1:loop, f0);
+xlabel('Function evaluations');
+ylabel('Objective function');

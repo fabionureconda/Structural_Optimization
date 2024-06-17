@@ -3,7 +3,7 @@ nelx = 60;          % Number of elements in x-direction
 nely = 60;          % Number of elements in y-direction
 volfrac = 1;        % Maximum volume fraction
 penal = 3;          % Penalization power
-rmin = 4.5;           % Filter radius in terms of elements
+rmin = 2;           % Filter radius in terms of elements
 unitF = 10e3;       % Force divided 5 times (unit force)
 
 % MATERIAL PROPERTIES
@@ -28,11 +28,11 @@ iK = reshape(kron(edofMat, ones(8,1))', 64*nelx*nely, 1);
 jK = reshape(kron(edofMat, ones(1,8))', 64*nelx*nely, 1);
 
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-F1 = sparse(2*((nely+1)*(nelx+1)+0)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F2 = sparse(2*((nely+1)*(nelx+1)+1)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F3 = sparse(2*((nely+1)*(nelx+1)+2)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F4 = sparse(2*((nely+1)*(nelx+1)+3)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F5 = sparse(2*((nely+1)*(nelx+1)+4)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
+F1 = sparse(2*((nely+1)*(nelx+1)+1)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
+F2 = sparse(2*((nely+1)*(nelx+1)+2)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
+F3 = sparse(2*((nely+1)*(nelx+1)+3)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
+F4 = sparse(2*((nely+1)*(nelx+1)+4)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
+F5 = sparse(2*((nely+1)*(nelx+1)+5)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
 F = F1 + F2 + F3 + F4 + F5;
 
 U = zeros(2*(nely+1)*(nelx+1), 1);
@@ -76,12 +76,13 @@ change = 1;             % (Fictitious) initial design change
 tol = 0.01;             % Convergence threshold
 mmaparams = [];         % Internal MMA parameters
 move = 0.05;            % Move parameter for MMA
+itermax = 150;
 
 % FINITE DIFFERENCE
 h3 = 1e-7;
 df3dx = zeros(nelx*nely, 1);
 
-while (change > tol) && (r < 40)
+while iter < itermax
 
     % APPLY FILTER TO OBTAIN PHYSICAL DENSITIES
     xPhys = conv2(x, h, 'same')./Hs;
@@ -128,15 +129,7 @@ while (change > tol) && (r < 40)
     end
     qs = sum(qv, 2);
     Lambda = K \ qs;    
-%{
-    sK2 = reshape(KE(:)*penal*(xPhys(:)'.^(penal-1) * (E0 - Emin)), 64*nelx*nely, 1);
-    K2 = sparse(iK, jK, sK2);
-    K2 = (K2 + K2') / 2;
-    
-    ce = L1 * KE;
-    term222 = (penal*(xPhys(:)'.^(penal-1) * (E0 - Emin))).*ce(:);
-    %term22 = L1 * K22 * U;
-%} 
+
     term22 = reshape(sum((Lambda(edofMat)*KE).*U(edofMat),2),nely,nelx);
     term22 = (penal*(xPhys(:).^(penal-1) * (E0 - Emin))).*term22(:);
     
@@ -213,13 +206,7 @@ while (change > tol) && (r < 40)
   colorbar;
 
   sig_vMe = sig_vMe(:);
-  %{
-  figure(3)
-  plot(dfdx', 'r')
-  hold on
-  plot(df3dx, 'b')
-  hold off
-  %}
+
   % CHECK CONVERGENCE CRITERIA AND MOVE ON TO NEXT ITERATION
   if change>tol
     iter = iter+1;

@@ -3,7 +3,7 @@ nelx = 60;          % Number of elements in x-direction
 nely = 24;          % Number of elements in y-direction
 volfrac = 1;        % Maximum volume fraction
 penal = 3;          % Penalization power
-rmin = 4.5;           % Filter radius in terms of elements
+rmin = 2;           % Filter radius in terms of elements
 unitF = 10e3;       % Force divided 5 times (unit force)
 
 % MATERIAL PROPERTIES
@@ -28,11 +28,11 @@ iK = reshape(kron(edofMat, ones(8,1))', 64*nelx*nely, 1);
 jK = reshape(kron(edofMat, ones(1,8))', 64*nelx*nely, 1);
 
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-F1 = sparse(2*((nely+1)*(nelx)+0), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F2 = sparse(2*((nely+1)*(nelx)+1), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F3 = sparse(2*((nely+1)*(nelx)+2), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F4 = sparse(2*((nely+1)*(nelx)+3), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F5 = sparse(2*((nely+1)*(nelx)+4), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F1 = sparse(2*((nely+1)*(nelx)+1), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F2 = sparse(2*((nely+1)*(nelx)+2), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F3 = sparse(2*((nely+1)*(nelx)+3), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F4 = sparse(2*((nely+1)*(nelx)+4), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
+F5 = sparse(2*((nely+1)*(nelx)+5), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
 F = F1+F2+F3+F4+F5;
 
 U = zeros(2*(nely+1)*(nelx+1), 1);
@@ -46,7 +46,7 @@ freedofs = setdiff(alldofs, fixeddofs);
 sig_max = 235e6;
 q = 2.5;
 r = 2;
-delta_r = 0.1;
+delta_r = 0.5;
 Be = 1/(2*l)*[-1, 0, 1, 0, 1, 0, -1, 0; 0, -1, 0, -1, 0, 1, 0, 1; -1, -1, -1, 1, 1, 1, 1, -1];
 D0 = E0/(1-nu^2)*[1, nu, 0; nu, 1, 0; 0, 0, (1-nu)/2];
 
@@ -66,12 +66,13 @@ change = 1;             % (Fictitious) initial design change
 tol = 0.01;             % Convergence threshold
 mmaparams = [];         % Internal MMA parameters
 move = 0.05;            % Move parameter for MMA
+itermax = 200;
 
 % FINITE DIFFERENCE
 h3 = 1e-7;
 df3dx = zeros(nelx*nely, 1);
 
-while (change > tol) && (r < 40)
+while iter < itermax
 
     % APPLY FILTER TO OBTAIN PHYSICAL DENSITIES
     xPhys = conv2(x, h, 'same')./Hs;
@@ -110,22 +111,13 @@ while (change > tol) && (r < 40)
     qv = zeros(2*(nely+1)*(nelx+1), nelx*nely); 
     for el = 1:nelx*nely
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
-        Ce = full(Ce);
         q1 = ((sig_vMe(el) / ((xPhys(el)^(q-penal))* sig_max))^(r-1)) * (1/(xPhys(el)^(q-penal)*sig_max)) * (1/(2*sig_vMe(el)));
         qe = q1 * (((2*sig_xxe(el) - sig_yye(el)) * D0(1,:) + (2*sig_xye(el) - sig_xxe(el)) * D0(2,:) + 6*sig_xye(el) * D0(3,:)) * Be * Ce)';
         qv(:, el) = qe;
     end
     qs = sum(qv, 2);
-    Lambda = K \ qs;    
-%{
-    sK2 = reshape(KE(:)*penal*(xPhys(:)'.^(penal-1) * (E0 - Emin)), 64*nelx*nely, 1);
-    K2 = sparse(iK, jK, sK2);
-    K2 = (K2 + K2') / 2;
-    
-    ce = L1 * KE;
-    term222 = (penal*(xPhys(:)'.^(penal-1) * (E0 - Emin))).*ce(:);
-    %term22 = L1 * K22 * U;
-%} 
+    Lambda = K \ qv;    
+
     term22 = reshape(sum((Lambda(edofMat)*KE).*U(edofMat),2),nely,nelx);
     term22 = (penal*(xPhys(:).^(penal-1) * (E0 - Emin))).*term22(:);
     
@@ -174,7 +166,7 @@ while (change > tol) && (r < 40)
     end
 
   % MMA UPDATE
-  [xnew,~,~,~,mmaparams,subp,change,history] = mma(x(:), xmin, xmax, f0, f, df0dx, df3dx, mmaparams, move);
+  [xnew,~,~,~,mmaparams,subp,change,history] = mma(x(:), xmin, xmax, f0, f, df0dx, dfdx, mmaparams, move);
 
   % COLLECT CONVERGENCE HISTORY
   history.iter(:,iter) = iter;
@@ -215,6 +207,9 @@ while (change > tol) && (r < 40)
     x(:) = xnew;
     x = reshape(x, nely, nelx);
     r = r + delta_r;
+    if r > 40
+        r = 40;
+    end
    end
 
 end
