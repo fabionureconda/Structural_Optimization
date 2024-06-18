@@ -1,10 +1,9 @@
 % PROBLEM SETUP
-nelx = 60;          % Number of elements in x-direction
-nely = 24;          % Number of elements in y-direction
-volfrac = 1;        % Maximum volume fraction
-penal = 3;          % Penalization power
-rmin = 2;           % Filter radius in terms of elements
-unitF = 10e3;       % Force divided 5 times (unit force)
+nelx = 200;          % Number of elements in x-direction
+nely = 80;           % Number of elements in y-direction
+volfrac = 1;         % Maximum volume fraction
+penal = 3;           % Penalization power
+rmin = 2;            % Filter radius in terms of elements
 
 % MATERIAL PROPERTIES
 E0 = 210e9;         % Young's modulus for the solid material
@@ -19,7 +18,7 @@ A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
 B11 = [-4  3 -2  9;  3 -4 -9  4; -2 -9 -4 -3;  9  4 -3 -4];
 B12 = [ 2 -3  4 -9; -3  2  9 -2;  4  9  2  3; -9 -2  3  2];
 
-KE = 1/(1-nu^2)/24*([A11 A12; A12' A11] + nu*[B11 B12; B12' B11]);
+KE = t/(1-nu^2)/24*([A11 A12; A12' A11] + nu*[B11 B12; B12' B11]);
 
 nodenrs = reshape(1:(1+nelx)*(1+nely), 1+nely, 1+nelx);
 edofVec = reshape(2*nodenrs(1:end-1,1:end-1)+1, nelx*nely, 1);
@@ -28,25 +27,27 @@ iK = reshape(kron(edofMat, ones(8,1))', 64*nelx*nely, 1);
 jK = reshape(kron(edofMat, ones(1,8))', 64*nelx*nely, 1);
 
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-F1 = sparse(2*((nely+1)*(nelx)+1), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F2 = sparse(2*((nely+1)*(nelx)+2), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F3 = sparse(2*((nely+1)*(nelx)+3), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F4 = sparse(2*((nely+1)*(nelx)+4), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F5 = sparse(2*((nely+1)*(nelx)+5), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F = F1+F2+F3+F4+F5;
-
-U = zeros(2*(nely+1)*(nelx+1), 1);
-U3 = zeros(2*(nely+1)*(nelx+1), 1);
+iF = nelx*(2*nely+2)+[2:2:nely/2]; 
+F = sparse(iF,1,-50e3/length(iF),2*(nely+1)*(nelx+1),1);
 
 fixeddofs = 1:2*(nely+1);
 alldofs = 1:2*(nely+1)*(nelx+1);
 freedofs = setdiff(alldofs, fixeddofs);
 
+% Initialize Values for the Cycle
+U = zeros(2*(nely+1)*(nelx+1), 1);
+U3 = zeros(2*(nely+1)*(nelx+1), 1);
+Lambda = zeros(2*(nely+1)*(nelx+1), 1);
+sig_xxe = zeros(nelx*nely, 1);
+sig_yye = zeros(nelx*nely, 1);
+sig_xye = zeros(nelx*nely, 1);
+qv = zeros(2*(nely+1)*(nelx+1), nelx*nely); 
+
 % FORMULATION OF THE OPTIMIZATION PROBLEM
-sig_max = 235e6;
+s_max = 235e6;
 q = 2.5;
 r = 2;
-delta_r = 0.5;
+delta_r = 0.1;
 Be = 1/(2*l)*[-1, 0, 1, 0, 1, 0, -1, 0; 0, -1, 0, -1, 0, 1, 0, 1; -1, -1, -1, 1, 1, 1, 1, -1];
 D0 = E0/(1-nu^2)*[1, nu, 0; nu, 1, 0; 0, 0, (1-nu)/2];
 
@@ -63,16 +64,15 @@ xmax = 1;               % Maximum value design variables
 % OPTIMIZATION LOOP
 iter = 1;               % Iteration counter
 change = 1;             % (Fictitious) initial design change
-tol = 0.01;             % Convergence threshold
+tol = 0.02;             % Convergence threshold
 mmaparams = [];         % Internal MMA parameters
 move = 0.05;            % Move parameter for MMA
-itermax = 200;
 
 % FINITE DIFFERENCE
 h3 = 1e-7;
 df3dx = zeros(nelx*nely, 1);
 
-while iter < itermax
+while change > tol
 
     % APPLY FILTER TO OBTAIN PHYSICAL DENSITIES
     xPhys = conv2(x, h, 'same')./Hs;
@@ -83,17 +83,12 @@ while iter < itermax
     K = sparse(iK, jK, sK);
     K = (K + K') / 2;
     U(freedofs) = K(freedofs, freedofs) \ F(freedofs);
-    U(fixeddofs) = 0;
     
     % OBJECTIVE FUNCTION
     v = sum(xPhys(:)) / nelx / nely;
     f0 = v - 1;
 
     % STRESS CALCULATION - CONSTRAINT
-    sig_xxe = zeros(nelx*nely, 1);
-    sig_yye = zeros(nelx*nely, 1);
-    sig_xye = zeros(nelx*nely, 1);
-
     for el = 1:nelx*nely
         Ue = U(edofMat(el, :));
         sig_xxe(el) = D0(1, :) * Be * Ue;
@@ -101,30 +96,27 @@ while iter < itermax
         sig_xye(el) = D0(3, :) * Be * Ue;
     end
     
-    sig_vMe = sqrt(sig_xxe.^2 + sig_yye.^2 - sig_xxe .* sig_yye + 3 .* sig_xye.^2);
+    s_vMe = sqrt(sig_xxe.^2 + sig_yye.^2 - sig_xxe .* sig_yye + 3 .* sig_xye.^2);
     
-    f = sum((sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)).^r)^(1/r) - 1;
-
-    cs = max(sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)) / sum((sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)).^r)^(1/r);
+    f = max(s_vMe./xPhys(:).^(q-penal)/s_max)-1;
 
     % SENSITIVITIES
-    qv = zeros(2*(nely+1)*(nelx+1), nelx*nely); 
     for el = 1:nelx*nely
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
-        q1 = ((sig_vMe(el) / ((xPhys(el)^(q-penal))* sig_max))^(r-1)) * (1/(xPhys(el)^(q-penal)*sig_max)) * (1/(2*sig_vMe(el)));
-        qe = q1 * (((2*sig_xxe(el) - sig_yye(el)) * D0(1,:) + (2*sig_xye(el) - sig_xxe(el)) * D0(2,:) + 6*sig_xye(el) * D0(3,:)) * Be * Ce)';
+        q1 = ((s_vMe(el) / ((xPhys(el)^(q-penal))* s_max))^(r-1)) * (1/(xPhys(el)^(q-penal)*s_max)) * (1/(2*s_vMe(el)));
+        qe = q1 * (((2*sig_xxe(el) - sig_yye(el)) * D0(1,:) + (2*sig_yye(el) - sig_xxe(el)) * D0(2,:) + 6*sig_xye(el) * D0(3,:)) * Be * Ce)';
         qv(:, el) = qe;
     end
     qs = sum(qv, 2);
-    Lambda = K \ qv;    
+    Lambda(freedofs) = K(freedofs, freedofs) \ qs(freedofs);   
 
-    term22 = reshape(sum((Lambda(edofMat)*KE).*U(edofMat),2),nely,nelx);
-    term22 = (penal*(xPhys(:).^(penal-1) * (E0 - Emin))).*term22(:);
+    term22 = sum((Lambda(edofMat)*KE).*U(edofMat),2);
+    term22 = (penal*(xPhys.^(penal-1) * (E0 - Emin))).*term22;
     
-    term1 = sum((sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)).^r)^((1/r) -1);
-    term21 = ((sig_vMe ./ ((xPhys.^(q-penal)).* sig_max)).^(r-1)) .* (penal - q) .* (sig_vMe ./ (xPhys.^(q-penal+1) .* sig_max));
+    term1 = (sum((s_vMe ./ ((xPhys.^(q-penal))* s_max)).^r))^((1/r) -1);
+    term21 = ((s_vMe ./ ((xPhys.^(q-penal))* s_max)).^(r-1)) * (penal - q) .* (s_vMe ./ (xPhys.^(q-penal+1) * s_max));
     
-    dpdxPhys = term1 * cs * (term21 - term22);
+    dpdxPhys = term1 * (term21 - term22);
     
     dpdxPhys = reshape(dpdxPhys, nely, nelx);    % Sensitivity wrt physical densities 
     dvdxPhys = repmat(1/nelx/nely, nely, nelx);  % Sensitivity wrt physical densities 
@@ -134,6 +126,8 @@ while iter < itermax
     df0dx = dvdx(:);
     dfdx = dpdx(:);
     
+    if iter == 20
+
     % FINITE DIFFERENCE CHECK
     x3 = x + h3;
     xPhys3 = conv2(x3, h, 'same')./Hs;
@@ -149,20 +143,24 @@ while iter < itermax
     sig_xxe3 = zeros(nelx*nely, 1);
     sig_yye3 = zeros(nelx*nely, 1);
     sig_xye3 = zeros(nelx*nely, 1);
+    sig_vMe3 = zeros(nelx*nely, 1);
     
     for el3 = 1:nelx*nely
         Ue3 = U3(edofMat(el3, :));
         sig_xxe3(el3) = D0(1, :) * Be * Ue3;
         sig_yye3(el3) = D0(2, :) * Be * Ue3;
         sig_xye3(el3) = D0(3, :) * Be * Ue3;
+        sig_vMe3(el3) = sqrt(sig_xxe3(el3)^2 + sig_yye3(el3)^2 - sig_xxe3(el3)* sig_yye3(el3) + 3* sig_xye3(el3)^2);
+        f3 = (sig_vMe3(el3) / ((xPhys3(el3)^(q-penal))* s_max)) - 1;
+        f2 = (s_vMe(el3)/ ((xPhys(el3)^(q-penal))* s_max)) - 1;
+        df3dx(el3, :) = (f3-f2)/(h3);
     end
-    
-    sig_vMe3 = sqrt(sig_xxe3.^2 + sig_yye3.^2 - sig_xxe3 .* sig_yye3 + 3 .* sig_xye3.^2);
-
-    for el = 1:nelx*nely
-        f3 = (sig_vMe3(el) / ((xPhys3(el)^(q-penal))* sig_max)) - 1;
-        f2 = (sig_vMe(el)/ ((xPhys(el)^(q-penal)).* sig_max)) - 1;
-        df3dx(el, :) = (f3-f2)/(h3);
+      
+    figure(3)
+    plot(dfdx, 'r')
+    hold on
+    plot(df3dx, 'b')
+    hold off
     end
 
   % MMA UPDATE
@@ -184,25 +182,18 @@ while iter < itermax
   axis('off');
   drawnow;
   
-  sig_vMe = reshape(sig_vMe, nely, nelx);
-  
+  s_vMe = reshape(s_vMe, nely, nelx);
+  sig_vMem = s_vMe .* ((xPhys.^penal).*s_max);
   figure(2)
-  imagesc(sig_vMe);
+  imagesc(sig_vMem);
   axis('equal');
   axis('off');
   colormap('turbo');
   colorbar;
 
-  sig_vMe = sig_vMe(:);
-  %{
-  figure(3)
-  plot(dfdx', 'r')
-  hold on
-  plot(df3dx, 'b')
-  hold off
-  %}
-  % CHECK CONVERGENCE CRITERIA AND MOVE ON TO NEXT ITERATION
-  if change>tol
+  s_vMe = s_vMe(:);
+
+    % MOVE ON TO NEXT ITERATION
     iter = iter+1;
     x(:) = xnew;
     x = reshape(x, nely, nelx);
@@ -210,7 +201,7 @@ while iter < itermax
     if r > 40
         r = 40;
     end
-   end
+  
 
 end
 
