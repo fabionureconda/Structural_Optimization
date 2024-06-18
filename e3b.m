@@ -1,15 +1,15 @@
 % PROBLEM SETUP
-nelx = 100;           % Number of elements in x-direction
-nely = 40;            % Number of elements in y-direction
-volfrac = 0.19;       % Maximum volume fraction
+nelx = 200;           % Number of elements in x-direction
+nely = 80;            % Number of elements in y-direction
+volfrac = 0.2;       % Maximum volume fraction
 penal = 3;            % Penalization power
 rmin = 1.8;             % Filter radius in terms of elements
 ft = 2;
+sig_max = 235e6;
 %% MATERIAL PROPERTIES
 E0 = 210e9;
 Emin = 1e-9*E0;
 nu = 0.3;
-unitF = 10e3;
 l = 0.01;
 t = 0.01;
 %% PREPARE FINITE ELEMENT ANALYSIS
@@ -25,12 +25,8 @@ iK = reshape(kron(edofMat,ones(8,1))',64*nelx*nely,1);
 jK = reshape(kron(edofMat,ones(1,8))',64*nelx*nely,1);
 
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-F1 = sparse(2*((nely+1)*(nelx)+1), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F2 = sparse(2*((nely+1)*(nelx)+2), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F3 = sparse(2*((nely+1)*(nelx)+3), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F4 = sparse(2*((nely+1)*(nelx)+4), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F5 = sparse(2*((nely+1)*(nelx)+5), 1, -unitF, 2*(nely+1)*(nelx+1), 1);
-F = F1+F2+F3+F4+F5;
+iF = nelx*(2*nely+2)+[2:2:nely/2]; 
+F = sparse(iF,1,-50e3/length(iF),2*(nely+1)*(nelx+1),1);
 U = zeros(2*(nely+1)*(nelx+1),1);
 fixeddofs = [1:2*(nely+1)];
 alldofs = [1:2*(nely+1)*(nelx+1)];
@@ -121,8 +117,9 @@ while change > 0.01
   colormap(gray); imagesc(1-xPhys); caxis([0 1]); axis equal; axis off; drawnow;
   %% PLOT STRESSES
   sig_vMe = reshape(sig_vMe, nely, nelx);
+  sig_vMem = sig_vMe .* ((xPhys.^penal).*sig_max);
   figure(2)
-  imagesc(sig_vMe);
+  imagesc(sig_vMem);
   axis('equal');
   axis('off');
   colormap('turbo');
