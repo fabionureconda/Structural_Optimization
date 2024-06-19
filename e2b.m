@@ -3,23 +3,21 @@ nelx = 200;          % Number of elements in x-direction
 nely = 80;           % Number of elements in y-direction
 volfrac = 1;         % Maximum volume fraction
 penal = 3;           % Penalization power
-rmin = 2;            % Filter radius in terms of elements
+rmin = 1;            % Filter radius in terms of elements
 
 % MATERIAL PROPERTIES
-E0 = 210e9;         % Young's modulus for the solid material
-Emin = 1e-9*E0;     % Young's modulus for the void material
-nu = 0.3;           % Poisson's ratio
-t = 0.01;           % Thickness
-l = 0.01;           % Element length
+E0 = 210e9;          % Young's modulus for the solid material
+Emin = 1e-9*E0;      % Young's modulus for the void material
+nu = 0.3;            % Poisson's ratio
+t = 0.01;            % Thickness
+l = 0.01;            % Element length
 
 % PREPARE FINITE ELEMENT ANALYSIS
 A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
 A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
 B11 = [-4  3 -2  9;  3 -4 -9  4; -2 -9 -4 -3;  9  4 -3 -4];
 B12 = [ 2 -3  4 -9; -3  2  9 -2;  4  9  2  3; -9 -2  3  2];
-
 KE = t/(1-nu^2)/24*([A11 A12; A12' A11] + nu*[B11 B12; B12' B11]);
-
 nodenrs = reshape(1:(1+nelx)*(1+nely), 1+nely, 1+nelx);
 edofVec = reshape(2*nodenrs(1:end-1,1:end-1)+1, nelx*nely, 1);
 edofMat = repmat(edofVec, 1, 8) + repmat([0 1 2*nely+[2 3 0 1] -2 -1], nelx*nely, 1);
@@ -37,11 +35,18 @@ freedofs = setdiff(alldofs, fixeddofs);
 % Initialize Values for the Cycle
 U = zeros(2*(nely+1)*(nelx+1), 1);
 U3 = zeros(2*(nely+1)*(nelx+1), 1);
+U4 = zeros(2*(nely+1)*(nelx+1), 1);
 Lambda = zeros(2*(nely+1)*(nelx+1), 1);
 sig_xxe = zeros(nelx*nely, 1);
 sig_yye = zeros(nelx*nely, 1);
 sig_xye = zeros(nelx*nely, 1);
 qv = zeros(2*(nely+1)*(nelx+1), nelx*nely); 
+
+% STRESS CALCULATION - CONSTRAINT
+sig_xxe3 = zeros(nelx*nely, 1);
+sig_yye3 = zeros(nelx*nely, 1);
+sig_xye3 = zeros(nelx*nely, 1);
+sig_vMe3 = zeros(nelx*nely, 1);
 
 % FORMULATION OF THE OPTIMIZATION PROBLEM
 s_max = 235e6;
@@ -69,7 +74,7 @@ mmaparams = [];         % Internal MMA parameters
 move = 0.05;            % Move parameter for MMA
 
 % FINITE DIFFERENCE
-h3 = 1e-7;
+h3 = 1e-9;
 df3dx = zeros(nelx*nely, 1);
 
 while change > tol
@@ -89,18 +94,18 @@ while change > tol
     f0 = v - 1;
 
     % STRESS CALCULATION - CONSTRAINT
+    
     for el = 1:nelx*nely
         Ue = U(edofMat(el, :));
         sig_xxe(el) = D0(1, :) * Be * Ue;
         sig_yye(el) = D0(2, :) * Be * Ue;
         sig_xye(el) = D0(3, :) * Be * Ue;
     end
-    
     s_vMe = sqrt(sig_xxe.^2 + sig_yye.^2 - sig_xxe .* sig_yye + 3 .* sig_xye.^2);
-    
     f = max(s_vMe./xPhys(:).^(q-penal)/s_max)-1;
 
     % SENSITIVITIES
+    
     for el = 1:nelx*nely
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
         q1 = ((s_vMe(el) / ((xPhys(el)^(q-penal))* s_max))^(r-1)) * (1/(xPhys(el)^(q-penal)*s_max)) * (1/(2*s_vMe(el)));
@@ -126,7 +131,7 @@ while change > tol
     df0dx = dvdx(:);
     dfdx = dpdx(:);
     
-    if iter == 20
+    if iter == 10
 
     % FINITE DIFFERENCE CHECK
     x3 = x + h3;
@@ -139,12 +144,6 @@ while change > tol
     U3(freedofs) = K3(freedofs, freedofs) \ F(freedofs);
     U3(fixeddofs) = 0;
     
-    % STRESS CALCULATION - CONSTRAINT
-    sig_xxe3 = zeros(nelx*nely, 1);
-    sig_yye3 = zeros(nelx*nely, 1);
-    sig_xye3 = zeros(nelx*nely, 1);
-    sig_vMe3 = zeros(nelx*nely, 1);
-    
     for el3 = 1:nelx*nely
         Ue3 = U3(edofMat(el3, :));
         sig_xxe3(el3) = D0(1, :) * Be * Ue3;
@@ -155,12 +154,7 @@ while change > tol
         f2 = (s_vMe(el3)/ ((xPhys(el3)^(q-penal))* s_max)) - 1;
         df3dx(el3, :) = (f3-f2)/(h3);
     end
-      
-    figure(3)
-    plot(dfdx, 'r')
-    hold on
-    plot(df3dx, 'b')
-    hold off
+    err = max(df3dx - dfdx)
     end
 
   % MMA UPDATE
@@ -190,19 +184,16 @@ while change > tol
   axis('off');
   colormap('turbo');
   colorbar;
-
   s_vMe = s_vMe(:);
 
-    % MOVE ON TO NEXT ITERATION
-    iter = iter+1;
-    x(:) = xnew;
-    x = reshape(x, nely, nelx);
-    r = r + delta_r;
-    if r > 40
-        r = 40;
-    end
-  
-
+  % MOVE ON TO NEXT ITERATION
+  iter = iter+1;
+  x(:) = xnew;
+  x = reshape(x, nely, nelx);
+  r = r + delta_r;
+  if r > 40
+      r = 40;
+  end
 end
 
 % PLOT CONVERGENCE HISTORY
