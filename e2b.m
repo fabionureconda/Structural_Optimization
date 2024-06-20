@@ -3,7 +3,9 @@ nelx = 200;          % Number of elements in x-direction
 nely = 80;           % Number of elements in y-direction
 volfrac = 1;         % Maximum volume fraction
 penal = 3;           % Penalization power
-rmin = 1;            % Filter radius in terms of elements
+rmin = 2;            % Filter radius in terms of elements
+q = 2.5;
+r = 2;
 
 % MATERIAL PROPERTIES
 E0 = 210e9;          % Young's modulus for the solid material
@@ -25,7 +27,7 @@ iK = reshape(kron(edofMat, ones(8,1))', 64*nelx*nely, 1);
 jK = reshape(kron(edofMat, ones(1,8))', 64*nelx*nely, 1);
 
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-iF = nelx*(2*nely+2)+[2:2:nely/2]; 
+iF = nelx*(2*nely+2)+[2:2:nely/2];
 F = sparse(iF,1,-50e3/length(iF),2*(nely+1)*(nelx+1),1);
 
 fixeddofs = 1:2*(nely+1);
@@ -35,12 +37,11 @@ freedofs = setdiff(alldofs, fixeddofs);
 % Initialize Values for the Cycle
 U = zeros(2*(nely+1)*(nelx+1), 1);
 U3 = zeros(2*(nely+1)*(nelx+1), 1);
-U4 = zeros(2*(nely+1)*(nelx+1), 1);
+
 Lambda = zeros(2*(nely+1)*(nelx+1), 1);
 sig_xxe = zeros(nelx*nely, 1);
 sig_yye = zeros(nelx*nely, 1);
 sig_xye = zeros(nelx*nely, 1);
-qv = zeros(2*(nely+1)*(nelx+1), nelx*nely); 
 
 % STRESS CALCULATION - CONSTRAINT
 sig_xxe3 = zeros(nelx*nely, 1);
@@ -50,8 +51,6 @@ sig_vMe3 = zeros(nelx*nely, 1);
 
 % FORMULATION OF THE OPTIMIZATION PROBLEM
 s_max = 235e6;
-q = 2.5;
-r = 2;
 delta_r = 0.1;
 Be = 1/(2*l)*[-1, 0, 1, 0, 1, 0, -1, 0; 0, -1, 0, -1, 0, 1, 0, 1; -1, -1, -1, 1, 1, 1, 1, -1];
 D0 = E0/(1-nu^2)*[1, nu, 0; nu, 1, 0; 0, 0, (1-nu)/2];
@@ -94,18 +93,15 @@ while change > tol
     f0 = v - 1;
 
     % STRESS CALCULATION - CONSTRAINT
-    
-    for el = 1:nelx*nely
-        Ue = U(edofMat(el, :));
-        sig_xxe(el) = D0(1, :) * Be * Ue;
-        sig_yye(el) = D0(2, :) * Be * Ue;
-        sig_xye(el) = D0(3, :) * Be * Ue;
-    end
+    Ues = U(edofMat);
+    sig_xxe = D0(1, :) * Be * Ues';
+    sig_yye = D0(2, :) * Be * Ues';
+    sig_xye = D0(3, :) * Be * Ues';
     s_vMe = sqrt(sig_xxe.^2 + sig_yye.^2 - sig_xxe .* sig_yye + 3 .* sig_xye.^2);
+    s_vMe = s_vMe(:);
     f = max(s_vMe./xPhys(:).^(q-penal)/s_max)-1;
 
     % SENSITIVITIES
-    
     for el = 1:nelx*nely
         Ce = sparse(1:8, edofMat(el, :), ones(1,8), 8, 2*(nely+1)*(nelx+1));
         q1 = ((s_vMe(el) / ((xPhys(el)^(q-penal))* s_max))^(r-1)) * (1/(xPhys(el)^(q-penal)*s_max)) * (1/(2*s_vMe(el)));
