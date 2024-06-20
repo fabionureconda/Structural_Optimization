@@ -1,16 +1,15 @@
 % PROBLEM SETUP
-nelx = 100;           % Number of elements in x-direction
-nely = 100;            % Number of elements in y-direction
-volfrac = 0.15;       % Maximum volume fraction
-penal = 3;            % Penalization power
-rmin = 2.5;             % Filter radius in terms of elements
+nelx = 200;            % Number of elements in x-direction
+nely = 200;            % Number of elements in y-direction
+volfrac = 0.15;         % Maximum volume fraction
+penal = 3;             % Penalization power
+rmin = 2;              % Filter radius in terms of elements
 ft = 2;
-
+sig_max = 235e6;
 %% MATERIAL PROPERTIES
-E0 = 1;
-Emin = 1e-9;
+E0 = 210e9;
+Emin = 1e-9*E0;
 nu = 0.3;
-unitF = 10e3;
 l = 0.01;
 t = 0.01;
 %% PREPARE FINITE ELEMENT ANALYSIS
@@ -18,7 +17,7 @@ A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
 A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
 B11 = [-4  3 -2  9;  3 -4 -9  4; -2 -9 -4 -3;  9  4 -3 -4];
 B12 = [ 2 -3  4 -9; -3  2  9 -2;  4  9  2  3; -9 -2  3  2];
-KE = 1/(1-nu^2)/24*([A11 A12;A12' A11]+nu*[B11 B12;B12' B11]);
+KE = t/(1-nu^2)/24*([A11 A12;A12' A11]+nu*[B11 B12;B12' B11]);
 nodenrs = reshape(1:(1+nelx)*(1+nely),1+nely,1+nelx);
 edofVec = reshape(2*nodenrs(1:end-1,1:end-1)+1,nelx*nely,1);
 edofMat = repmat(edofVec,1,8)+repmat([0 1 2*nely+[2 3 0 1] -2 -1],nelx*nely,1);
@@ -26,12 +25,9 @@ iK = reshape(kron(edofMat,ones(8,1))',64*nelx*nely,1);
 jK = reshape(kron(edofMat,ones(1,8))',64*nelx*nely,1);
 
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-F1 = sparse(2*((nely+1)*(nelx+1)+0)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F2 = sparse(2*((nely+1)*(nelx+1)+1)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F3 = sparse(2*((nely+1)*(nelx+1)+2)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F4 = sparse(2*((nely+1)*(nelx+1)+3)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F5 = sparse(2*((nely+1)*(nelx+1)+4)-2*round(2/5*nely),1,-unitF,2*(nely+1)*(nelx+1),1);
-F = F1 + F2 + F3 + F4 + F5;
+iF = nelx*(2*nely+2)+[2*(round(3/5*nely)+1):2:2*round(3.25/5*nely)];
+F = sparse(iF,1,-50e3/length(iF),2*(nely+1)*(nelx+1),1);
+
 U = zeros(2*(nely+1)*(nelx+1),1);
 fixeddofs = union([1:2*(nely+1):2*(nely+1)*(nelx+1)],[2:2*(nely+1):2*(nely+1)*(nelx+1)]);
 alldofs = [1:2*(nely+1)*(nelx+1)];
@@ -49,7 +45,9 @@ end
 % STRESS INITIALIZATION
 Be = 1/(2*l)*[-1, 0, 1, 0, 1, 0, -1, 0; 0, -1, 0, -1, 0, 1, 0, 1; -1, -1, -1, 1, 1, 1, 1, -1];
 D0 = E0/(1-nu^2)*[1, nu, 0; nu, 1, 0; 0, 0, (1-nu)/2];
-
+sig_xxe = zeros(nelx*nely, 1);
+sig_yye = zeros(nelx*nely, 1);
+sig_xye = zeros(nelx*nely, 1);
 %% PREPARE FILTER
 iH = ones(nelx*nely*(2*(ceil(rmin)-1)+1)^2,1);
 jH = ones(size(iH));
@@ -74,13 +72,13 @@ Hs = sum(H,2);
 %% INITIALIZE ITERATION
 x = repmat(volfrac,nely,nelx);
 xPhys = x;
-xPhys(passive == 1) = 0;
 loop = 0;
 change = 1;
 %% START ITERATION
 while change > 0.01
   loop = loop + 1;
   %% FE-ANALYSIS
+  xPhys(passive == 1) = 0;
   sK = reshape(KE(:)*(Emin+xPhys(:)'.^penal*(E0-Emin)),64*nelx*nely,1);
   K = sparse(iK,jK,sK); K = (K+K')/2;
   U(freedofs) = K(freedofs,freedofs)\F(freedofs);
@@ -91,10 +89,6 @@ while change > 0.01
   dv = ones(nely,nelx);
   f0(loop) = c;
   %% STRESS CALCULATION
-  sig_xxe = zeros(nelx*nely, 1);
-  sig_yye = zeros(nelx*nely, 1);
-  sig_xye = zeros(nelx*nely, 1);
-
   for el = 1:nelx*nely
         Ue = U(edofMat(el, :));
         sig_xxe(el) = D0(1, :) * Be * Ue;
@@ -122,7 +116,6 @@ while change > 0.01
       xPhys(:) = (H*xnew(:))./Hs;
     end
     if sum(xPhys(:)) > volfrac*nelx*nely, l1 = lmid; else l2 = lmid; end
-    xPhys(passive == 1) = 0;
   end
   change = max(abs(xnew(:)-x(:)));
   x = xnew;
@@ -135,9 +128,9 @@ while change > 0.01
 
   %% PLOT STRESSES
   sig_vMe = reshape(sig_vMe, nely, nelx);
-  
+  sig_vMem = sig_vMe .* ((xPhys.^penal).*sig_max);
   figure(2)
-  imagesc(sig_vMe);
+  imagesc(sig_vMem);
   axis('equal');
   axis('off');
   colormap('turbo');
