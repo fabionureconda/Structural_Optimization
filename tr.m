@@ -1,18 +1,18 @@
 % PROBLEM SETUP
-nelx = 200;          % Number of elements in x-direction
-nely = 200;           % Number of elements in y-direction
-volfrac = 1;         % Maximum volume fraction
-penal = 3;           % Penalization power
-rmin = 2;            % Filter radius in terms of elements
-q = 2.5;
-r = 2;
+nelx = 100;           % Number of elements in x-direction
+nely = 100;           % Number of elements in y-direction
+volfrac = 1;          % Maximum volume fraction
+penal = 3.3;            % Penalization power
+rmin = 2.3;           % Filter radius in terms of elements
+q = 2.8;
+r = 1;
 
 % MATERIAL PROPERTIES
-E0 = 210e9;          % Young's modulus for the solid material
-Emin = 1e-9*E0;      % Young's modulus for the void material
-nu = 0.3;            % Poisson's ratio
-t = 0.01;            % Thickness
-l = 0.01;            % Element length
+E0 = 210e9;           % Young's modulus for the solid material
+Emin = 1e-9*E0;       % Young's modulus for the void material
+nu = 0.3;             % Poisson's ratio
+t = 0.01;             % Thickness
+l = 0.04;             % Element length
 
 % PREPARE FINITE ELEMENT ANALYSIS
 A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
@@ -27,7 +27,7 @@ iK = reshape(kron(edofMat, ones(8,1))', 64*nelx*nely, 1);
 jK = reshape(kron(edofMat, ones(1,8))', 64*nelx*nely, 1);
 
 % DEFINE LOADS AND SUPPORTS (HALF MBB-BEAM)
-iF = nelx*(2*nely+2)+[2*(round(3/5*nely)+1):2:2*round(3.25/5*nely)];
+iF = nelx*(2*nely+2)+[2*(round(3/5*nely)+1):2:2*round(3.5/5*nely)];
 F = sparse(iF,1,-50e3/length(iF),2*(nely+1)*(nelx+1),1);
 
 fixeddofs = union([1:2*(nely+1):2*(nely+1)*(nelx+1)],[2:2*(nely+1):2*(nely+1)*(nelx+1)]);
@@ -37,12 +37,12 @@ freedofs = setdiff(alldofs, fixeddofs);
 % Initialize Values for the Cycle
 U = zeros(2*(nely+1)*(nelx+1), 1);
 U3 = zeros(2*(nely+1)*(nelx+1), 1);
+qv = zeros(2*(nely+1)*(nelx+1), nelx*nely);
 
 Lambda = zeros(2*(nely+1)*(nelx+1), 1);
 sig_xxe = zeros(nelx*nely, 1);
 sig_yye = zeros(nelx*nely, 1);
 sig_xye = zeros(nelx*nely, 1);
-qv = sparse(2*(nely+1)*(nelx+1), nelx*nely);
 
 % STRESS CALCULATION - CONSTRAINT
 sig_xxe3 = zeros(nelx*nely, 1);
@@ -78,21 +78,21 @@ xmax = 1;               % Maximum value design variables
 % OPTIMIZATION LOOP
 iter = 1;               % Iteration counter
 change = 1;             % (Fictitious) initial design change
-tol = 0.0002;             % Convergence threshold
 mmaparams = [];         % Internal MMA parameters
-move = 0.05;            % Move parameter for MMA
+move = 0.04;            % Move parameter for MMA
+itermax = 250;
 
 % FINITE DIFFERENCE
 h3 = 1e-9;
 df3dx = zeros(nelx*nely, 1);
 
-while change > tol
+while iter<itermax
 
     % APPLY FILTER TO OBTAIN PHYSICAL DENSITIES
     x(passive == 1) = 0;
     xPhys = conv2(x, h, 'same')./Hs;
     xPhys = xPhys(:);
-
+        
     % FINITE ELEMENT ANALYSIS
     sK = reshape(KE(:)*(Emin + xPhys(:)'.^penal * (E0 - Emin)), 64*nelx*nely, 1);
     K = sparse(iK, jK, sK);
@@ -102,17 +102,16 @@ while change > tol
     % OBJECTIVE FUNCTION
     v = sum(xPhys(:)) / nelx / nely;
     f0 = v - 1;
-
-    % STRESS CALCULATION - CONSTRAINT
     
-    for el = 1:nelx*nely
-        Ue = U(edofMat(el, :));
-        sig_xxe(el) = D0(1, :) * Be * Ue;
-        sig_yye(el) = D0(2, :) * Be * Ue;
-        sig_xye(el) = D0(3, :) * Be * Ue;
-    end
+    % STRESS CALCULATION - CONSTRAINT   
+    Ues = U(edofMat);
+    sig_xxe = D0(1, :) * Be * Ues';
+    sig_yye = D0(2, :) * Be * Ues';
+    sig_xye = D0(3, :) * Be * Ues';
     s_vMe = sqrt(sig_xxe.^2 + sig_yye.^2 - sig_xxe .* sig_yye + 3 .* sig_xye.^2);
+    s_vMe = s_vMe(:);
     f = max(s_vMe./xPhys(:).^(q-penal)/s_max)-1;
+    cs = max(s_vMe ./ ((xPhys.^(q-penal)).* s_max)) / sum((s_vMe ./ ((xPhys.^(q-penal)).* s_max)).^r)^(1/r);
 
     % SENSITIVITIES
     for el = 1:nelx*nely
@@ -130,7 +129,7 @@ while change > tol
     term1 = (sum((s_vMe ./ ((xPhys.^(q-penal))* s_max)).^r))^((1/r) -1);
     term21 = ((s_vMe ./ ((xPhys.^(q-penal))* s_max)).^(r-1)) * (penal - q) .* (s_vMe ./ (xPhys.^(q-penal+1) * s_max));
     
-    dpdxPhys = term1 * (term21 - term22);
+    dpdxPhys = term1 * cs * (term21 - term22);
     
     dpdxPhys = reshape(dpdxPhys, nely, nelx);    % Sensitivity wrt physical densities 
     dvdxPhys = repmat(1/nelx/nely, nely, nelx);  % Sensitivity wrt physical densities 
